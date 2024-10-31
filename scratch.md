@@ -90,8 +90,55 @@
   - Distributions
     - gaussian mixture (2)
   
-  
+
 - What to do after *all* fits are run?
   - Run with rollouts/integrate CIs into fits
 
-- 
+
+
+
+- Open problem:
+  - Getting window freqs to play nicely with retrodiction. 
+  - GMM extraps
+    - Means (lower and upper) follow a kinked linear
+    - vars are far more variable - uniform sampling could be pretty appropriate here.
+  - Worth noting that gm fit for 2017 is horrendous
+- Ideally it'd be good to plot BICS but maybe this isn't needed for GovAI post
+
+- 5 free parameters for a gaussian mixture model fit
+- Problem - how to weight future gaussian distributions
+
+
+- On GMM weights
+  - There seems to be increasing pref to upper dist
+  - I'm sceptical it could go all the way to 1
+
+- On GMM weights
+  - David intuition was that distribution would become *more skewed* - we want our weights to match that
+
+- retrodicting gmms
+  - Currently: 
+    - We lin extrapolate dist means
+    - We uniform sample stds
+    - We uniform sample gmm weight
+  - How to retrodict
+    - Clear for dist means
+    - Do we just keep randomly sampling?
+      - Clearly can't apply same bounds for weights
+      - Could just use observed weights
+        - let's do that for now
+    - There is:
+      - kde, fitted gmm, retrodicted gmm
+    - Could setup retrodict params at once
+  
+  - The gmm fit for 2023 is *great*
+
+- Even though there's many probs with gmm retr I'm still happy to implement it with toy exaxmples to get *code structure.* 
+  - minimum working workflow
+
+- WWR4xBxH
+
+
+
+- To share with Alex
+  - 
