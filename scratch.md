@@ -141,4 +141,26 @@
 
 
 - To share with Alex
-  - 
+  - clean up code, write docstrings
+
+- Our retrodiction is pretty hacky with both fits
+  - using fitted vars, covars, weights
+
+- check if times within start_times, end_time
+
+- Not 'true' retrodiction problem
+
+- ideally we plot the retrodictions
+  - Solve hacky retrodict problem
+    - We could sample from bounds that are more suitable for the 2020-2023 range 
+      - So the method here is 'uniform sampling', but the bounds are different.
+      - worth noting that current gmm is just not a good fit, given that we're getting diffs of ~30 in some cases
+      - Let's just present current method of uniform sampling, then ping alex
+
+- Let's just pass off messy retrodict -> just be clear. Our question is more like 'how do we model this well?'
+  - Ok. Assuming away this means that our goal is to *show* Alex the problem we're posing
+
+
+- Improving gmm fits
+  - Set breakpoint on pwlf
+  - Set weights more equally (move up/down)
