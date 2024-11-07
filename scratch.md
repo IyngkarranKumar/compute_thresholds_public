@@ -164,3 +164,29 @@
 - Improving gmm fits
   - Set breakpoint on pwlf
   - Set weights more equally (move up/down)
+
+- To do
+  - Share nb and update Alex about gmm fits
+
+
+------
+
+
+- plot-table backbone
+  - Core
+    - 1e25 and 1e26 headline, from EO(?) 2025 -> 2028 (4 years)
+    - All predictions, and table
+    - Frontier-connected threshold
+      - I'm happy jettisoning this to get a post out.
+    - retrodiction
+    - comparisons for frontier training compute
+    - 
+  - Appendix
+    - KDE of distributions, normal, gmm fits (maybe), or could just leave this in notebook
+    - 
+  - notes: need to implement for frontier-connected threshold
+    - need to solve "quarterly v.s. yearly plot" stuff
+    - perhaps we don't have to be so 'mathy' with model distributions. Build it around "incr. concentration" rather trying to fit a distribution. Call this the *heuristic approach*
+  
+- To do
+  - sort out "quarter counting" method for frontier connected threshold 
