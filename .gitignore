@@ -1,2 +1,6 @@
 old_files
 scratch.md
+scratch.ipynb
+.vscode/
+.DS_Store
+.ipynb_checkpoints/
