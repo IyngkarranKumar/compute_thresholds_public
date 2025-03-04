@@ -1,76 +1,6 @@
 ### File for running large number of scenarios
 
 
-if 1: #===CONFIG===
-
-
-    #training compute extrapolation
-    LINEAR_EXTRAP=True
-    AI2027_EXTRAP=True
-    method_choice="linear extrapolation" #['linear extrapolation', 'method 2027']
-    g_global_AI_compute=2.25
-    g_AI_workload_share=2.0 #assuming AI_compute_usage/AI_compute_capacity = const - 3.0 gets the two superposed!
-
-
-    #allocations
-    FIXED_ALLOCATION=False
-    fixed_tau=0.8 #all copute to training 
-    DECREASING_TAU=True #inference scaling continues improving
-    assert(FIXED_ALLOCATION+DECREASING_TAU)==1
-    tau_dict = {
-        2024: 1.0,
-        2025: 0.9,
-        2026: 0.8,
-        2027: 0.7,
-        2028: 0.6,
-    }
-
-    #generate samples
-    CONST_FM=True
-    LIN_EXTRAP_FM=False
-    CUSTOM_FM=False
-    if CUSTOM_FM:
-        fm_grad_dict={
-            2024:1.1,
-            2025:1.1,
-            2026:1.1,
-            2027:1.1,
-            2028:1.1,
-            2029:1.1
-        }
-        fm_int_dict={
-            2024:0.9,
-            2025:0.8,
-            2026:0.7,
-            2027:0.6,
-            2028:0.5,
-            2029:0.4
-        }
-
-    #individual model size parameters
-    log_min_norm_m = np.log10(1e-8) #the smallest model to allocate compute to is ~1e-8 the size of total compute spending that year
-    log_max_norm_m = np.log10(1e-1) #free param - assume that largest model that year is no larger than 10% of total training compute (can find this from historic data and so sensitivity analysis)
-
-
-    #bin sampling parameters
-    bin_sampling_method='random'
-    k=-100 #for exponential dist sampling
-
-
-    thresholds=[25, 26, 27, 28, 29, 30]
-
-    #frontier-connected threshold counts for samples
-    threshold_widths = [0.5, 1, 1.5]  # List of threshold widths to analyze
-    period_freq = '6M'  # Can be changed to any frequency like '1Y', '3M', '30D'
-
-    retrodict_thresholds=[23, 24, 25]
-
-    PLOT_SCHEMATIC_SCATTER=False
-    TOTAL_COMPUTE_PLOT=False
-    PLOT_SAMPLE_KDES=False
-    PLOT_SAMPLE_SCATTERS=False
-
-
 
 if 1: #===IMPORTS===
         
@@ -94,7 +24,8 @@ if 1: #===IMPORTS===
         import pandas as pd
         import seaborn as sns
         import itertools
-        import copy,re, pdb, warnings
+        from datetime import datetime
+        import copy,re, pdb, warnings, os
         
         end_time = time.time()
         logging.info(f"Imports completed in {end_time - start_time:.2f} seconds")
@@ -105,6 +36,75 @@ if 1: #===IMPORTS===
 
     np.random.seed(42)
     warnings.filterwarnings("ignore")
+
+if 1: #===CONFIG===
+
+    #workflow config
+    PLOT_SCHEMATIC_SCATTER=False
+    TOTAL_COMPUTE_PLOT=False
+    PLOT_SAMPLE_KDES=False
+    PLOT_SAMPLE_SCATTERS=False
+    SAVE_RESULTS=True
+
+    #training compute extrapolation config 
+    LINEAR_EXTRAP=True
+    AI2027_EXTRAP=True
+    method_choice="linear extrapolation" #['linear extrapolation', 'method 2027']
+    g_global_AI_compute=2.25
+    g_AI_workload_share=2.0 #assuming AI_compute_usage/AI_compute_capacity = const - 3.0 gets the two superposed!
+
+
+    #allocation config
+    hist_alloc=50/50 #historical ratio of traiinng to inference
+    hist_alloc_multiplier=1+1/hist_alloc
+    FIXED_ALLOCATION,fixed_tau=True,1
+    DECREASING_TAU=False #inference scaling continues improving
+    tau_dict = {
+        2024: 1.0,
+        2025: 0.9,
+        2026: 0.8,
+        2027: 0.7,
+        2028: 0.6,
+    }
+
+    #generate samples config
+    CONST_FM=True
+    LIN_EXTRAP_FM=False
+    CUSTOM_FM=False
+    if CUSTOM_FM:
+        fm_grad_dict={
+            2024:1.1,
+            2025:1.1,
+            2026:1.1,
+            2027:1.1,
+            2028:1.1,
+            2029:1.1
+        }
+        fm_int_dict={
+            2024:0.9,
+            2025:0.8,
+            2026:0.7,
+            2027:0.6,
+            2028:0.5,
+            2029:0.4
+        }
+    #individual model size parameters
+    log_min_norm_m = np.log10(1e-8) #the smallest model to allocate compute to is ~1e-8 the size of total compute spending that year
+    log_max_norm_m = np.log10(1e-1) #free param - assume that largest model that year is no larger than 10% of total training compute (can find this from historic data and so sensitivity analysis)
+    bin_sampling_method='random'
+
+
+    #threshold counting config
+    thresholds=[25, 26, 27, 28, 29, 30]
+    threshold_widths = [0.5, 1, 1.5]  # List of threshold widths to analyze
+    period_freq = '6M'  # frequency for doing frontier counts
+    retrodict_thresholds=[23, 24, 25]
+
+    SAVE_CONFIG={
+        "compute extrapolation method":method_choice,
+        "compute allocation config":'decreasing tau' if DECREASING_TAU else 'fixed tau',
+        "tau": tau_dict if DECREASING_TAU else fixed_tau,
+    }
 
 if 1: #UTILS
 
@@ -139,7 +139,6 @@ if 1: #UTILS
         train_alloc = tau/(tau+1)
         inference_alloc = 1/(tau+1)
         return train_alloc, inference_alloc
-
 
 if 1: #===DATA LOADING===
     #Feb 2025 dataset
@@ -243,8 +242,6 @@ if 1: #Training compute extrapolation
 
     assert method_choice in ['linear extrapolation','method 2027']
 
-    #plot
-    PLOT=True
 
     LOG_AGGREGATE_COMPUTE_DATA={}
 
@@ -258,7 +255,7 @@ if 1: #Training compute extrapolation
 
 
     if 1: #do historical data
-        LOG_AGGREGATE_COMPUTE_DATA['historical data'] = {int(k): v for k, v in log_aggregate_compute.items()}
+        LOG_AGGREGATE_COMPUTE_DATA['historical aggregate training compute'] = {int(k): v for k, v in log_aggregate_compute.items()}
 
 
     if AI2027_EXTRAP:
@@ -288,7 +285,7 @@ if 1: #Training compute extrapolation
         # Fit exponential for extrapolation
         # Linear regression
         x = np.array(list(year_grouped_df.groups.keys())).reshape(-1, 1)
-        y = log_aggregate_compute.values
+        y = log_aggregate_compute.values + np.log10(hist_alloc_multiplier) #we're extrapolating total compute by making assumptions about historical allocation
         reg = LinearRegression().fit(x, y)
 
         # Generate future years for extrapolation
@@ -305,18 +302,21 @@ if 1: #Training compute extrapolation
 
     #do allocations
     if 1: 
+        assert(FIXED_ALLOCATION+DECREASING_TAU)==1
+
         if FIXED_ALLOCATION:
             train_alloc,inference_alloc=compute_allocations(tau=fixed_tau)
             LOG_AGGREGATE_COMPUTE_DATA['aggregate training compute'] = {year: val + np.log(train_alloc) for year, val in LOG_AGGREGATE_COMPUTE_DATA[f"Total-{method_choice}"].items()}
             LOG_AGGREGATE_COMPUTE_DATA['aggregate inference compute'] = {year: val + np.log(inference_alloc) for year, val in LOG_AGGREGATE_COMPUTE_DATA[f"Total-{method_choice}"].items()}
         
         if DECREASING_TAU:
+            print('DECREASING TAU')
             train_alloc_dict = {}
             inference_alloc_dict = {}
             
             for year, val in LOG_AGGREGATE_COMPUTE_DATA[f'Total-{method_choice}'].items():
                 tau = tau_dict.get(year, 1.0) #gets key; if key not found, default to 1
-                train_alloc, inference_alloc = compute_allocations(tau=tau)
+                train_alloc, inference_alloc = compute_allocations(tau=tau); logging.info(f"tau: {tau}, train_alloc: {train_alloc}, inference_alloc: {inference_alloc}")
                 train_alloc_dict[year] = val + np.log10(train_alloc)
                 inference_alloc_dict[year] = val + np.log10(inference_alloc)
                 
@@ -440,9 +440,9 @@ if 1: #Generate compute samples
     for year in all_years:
 
         if year in fit_years:
-            log_agg_training_compute=LOG_AGGREGATE_COMPUTE_DATA["historical data"][year]
+            log_agg_training_compute=LOG_AGGREGATE_COMPUTE_DATA["historical aggregate training compute"][year]
         if year in pred_years:
-            log_agg_training_compute=LOG_AGGREGATE_COMPUTE_DATA[f"Total-{method_choice}"][year]
+            log_agg_training_compute=LOG_AGGREGATE_COMPUTE_DATA[f"aggregate training compute"][year]
             
         agg_training_compute=10**log_agg_training_compute #total compute used over the year
 
@@ -561,8 +561,10 @@ if 1: # threshold counting
     df_counts_cumulative = df_counts.copy()
     for idx in df_counts.index:
         df_counts_cumulative.loc[idx] = df_counts.loc[idx].cumsum()
-    display(df_counts_cumulative)
 
+    print("\n\n\n\n\n")
+    #display(df_counts_cumulative)
+    absolute_threshold_predicted=df_counts_cumulative
 
 
     
@@ -614,8 +616,8 @@ if 1: # threshold counting
     df_frontier_yearly = pd.DataFrame(yearly_counts)
     df_frontier_yearly = df_frontier_yearly.transpose()
 
-
-    display(df_frontier_yearly)
+    frontier_threshold_predicted=df_frontier_yearly
+    #display(df_frontier_yearly)
 
 if 1: #backtesting 
     #backtesting the absolute thresholds
@@ -629,7 +631,7 @@ if 1: #backtesting
                                         for threshold in retrodict_thresholds}, 
                                         orient='index')
     df_observed.index = [f'>1e{t}' for t in retrodict_thresholds]
-    df_observed.index.name = 'Threshold'
+    #df_observed.index.name = 'Threshold'
 
     # Create retrodict counts dictionary
     retrodict_counts = {year: [] for year in retrodict_years}
@@ -643,7 +645,7 @@ if 1: #backtesting
 
     df_retrodict = pd.DataFrame(retrodict_counts,
                             index=[f'{t:.2e}' for t in retrodict_thresholds])
-    df_retrodict.index.name = 'Threshold'
+    #df_retrodict.index.name = 'Threshold'
 
     # Take cumulative sum across years for both dataframes
     df_observed_cumulative = df_observed.cumsum(axis=1)
@@ -657,7 +659,8 @@ if 1: #backtesting
     for year in df_observed_cumulative.columns:
         combined_df[year] = list(zip(df_observed_cumulative[year], df_retrodict_cumulative[year]))
 
-    display(combined_df)
+    absolute_threshold_retrodicted=combined_df
+    #display(combined_df)
 
     ## frontier counts
 
@@ -735,7 +738,39 @@ if 1: #backtesting
         combined_df[col] = list(zip(summary_df[col], sample_summary_df[col]))
     combined_df.index = range(2020, 2024)
 
-    print("\nFrontier counts (observed, retrodicted):")
-    display(combined_df)
+    # Pivot the dataframe
+    combined_df = combined_df.T
+    frontier_threshold_retrodicted=combined_df
+
+    #display(combined_df)
+
+if 1: #display and save
+    display(absolute_threshold_predicted)
+    display(frontier_threshold_predicted)
+    display(absolute_threshold_retrodicted)
+    display(frontier_threshold_retrodicted)
+    
+
+    if SAVE_RESULTS:
+    # Create results directory if it doesn't exist
+        if not os.path.exists('results'):
+            os.makedirs('results')
+
+        # Get current date
+        current_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        # Save tables to results file
+        with open(f'results/{current_date}_thresholds.csv', 'w') as f:
+            f.write(f"Config: {SAVE_CONFIG}\n\n")
+            f.write("Absolute Threshold Predicted:\n")
+            absolute_threshold_predicted.to_csv(f,sep='\t')
+            f.write('\n\n')
+            f.write("Frontier Threshold Predicted:\n")
+            frontier_threshold_predicted.to_csv(f,sep='\t')
+            f.write('\n\n')
+            f.write("Absolute Threshold Retrodicted:\n")
+            absolute_threshold_retrodicted.to_csv(f,sep='\t')
+            f.write('\n\n')
+            f.write("Frontier Threshold Retrodicted:\n")
+            frontier_threshold_retrodicted.to_csv(f,sep='\t')
 
 
