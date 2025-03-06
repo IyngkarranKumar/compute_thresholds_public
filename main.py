@@ -4,12 +4,21 @@
 
 if 1: #===IMPORTS===
         
-    import logging, time 
+    import logging, time, os
+    from datetime import datetime
+
+    # Generate log file name based on current date and time
+    log_filename = datetime.now().strftime('logs/%Y-%m-%d_%H-%M-%S.log')
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        datefmt='%Y-%m-%d %H:%M:%S',
+        handlers=[
+            logging.FileHandler(log_filename),
+            #logging.StreamHandler()
+        ]
     )
+    logger = logging.getLogger()
 
 
     start_time = time.time()
@@ -44,7 +53,7 @@ if 1: #===CONFIG===
     TOTAL_COMPUTE_PLOT=False
     PLOT_SAMPLE_KDES=False
     PLOT_SAMPLE_SCATTERS=False
-    SAVE_RESULTS=True
+    SAVE_RESULTS=False
 
     #training compute extrapolation config 
     LINEAR_EXTRAP=True
@@ -57,18 +66,18 @@ if 1: #===CONFIG===
     #allocation config
     hist_alloc=50/50 #historical ratio of traiinng to inference
     hist_alloc_multiplier=1+1/hist_alloc
-    FIXED_ALLOCATION,fixed_tau=True,1
-    DECREASING_TAU=False #inference scaling continues improving
+    FIXED_ALLOCATION,fixed_tau=False,1 #tau=1 is 50/50 alloc
+    DECREASING_TAU=True #inference scaling continues improving
     tau_dict = {
-        2024: 1.0,
-        2025: 0.9,
-        2026: 0.8,
-        2027: 0.7,
-        2028: 0.6,
+        2024: 0.1,
+        2025: 0.1,
+        2026: 0.1,
+        2027: 0.1,
+        2028: 0.1,
     }
 
     #generate samples config
-    CONST_FM=True
+    CONST_FM=True #we take the mean of the f_m and f_int
     LIN_EXTRAP_FM=False
     CUSTOM_FM=False
     if CUSTOM_FM:
@@ -93,7 +102,6 @@ if 1: #===CONFIG===
     log_max_norm_m = np.log10(1e-1) #free param - assume that largest model that year is no larger than 10% of total training compute (can find this from historic data and so sensitivity analysis)
     bin_sampling_method='random'
 
-
     #threshold counting config
     thresholds=[25, 26, 27, 28, 29, 30]
     threshold_widths = [0.5, 1, 1.5]  # List of threshold widths to analyze
@@ -102,6 +110,8 @@ if 1: #===CONFIG===
 
     SAVE_CONFIG={
         "compute extrapolation method":method_choice,
+        "historical allocation":hist_alloc if method_choice=='linear extrapolation' else None,
+        "(g_global_AI_compute, g_AI_workload_share)":(g_global_AI_compute, g_AI_workload_share) if method_choice=='method 2027' else None,
         "compute allocation config":'decreasing tau' if DECREASING_TAU else 'fixed tau',
         "tau": tau_dict if DECREASING_TAU else fixed_tau,
     }
@@ -134,11 +144,16 @@ if 1: #UTILS
         return pd.Timestamp(year,1,1)+pd.Timedelta(days=days)
 
 
-    def compute_allocations(tau):
+    def tau_to_alloc(tau,inverse=False):
         tau = np.array(tau)
         train_alloc = tau/(tau+1)
         inference_alloc = 1/(tau+1)
         return train_alloc, inference_alloc
+    
+    def alloc_to_tau(train_alloc):
+        train_alloc=np.array(train_alloc)
+        tau = train_alloc/(1-train_alloc)
+        return tau
 
 if 1: #===DATA LOADING===
     #Feb 2025 dataset
@@ -242,25 +257,24 @@ if 1: #Training compute extrapolation
 
     assert method_choice in ['linear extrapolation','method 2027']
 
-
     LOG_AGGREGATE_COMPUTE_DATA={}
 
-
     year_grouped_df=df.groupby(df['date'][df['date']>'2010-01-01'].dt.year)
-    aggregate_compute=year_grouped_df['compute'].sum()
-    log_aggregate_compute=np.log10(aggregate_compute)
+    aggregate_training_compute=year_grouped_df['compute'].sum()
+    log_aggregate_training_compute=np.log10(aggregate_training_compute)
 
-    recent_years = log_aggregate_compute[log_aggregate_compute.index.isin(range(2020,df.year.max()+1))]
-    recent_log_compute_dict = {int(k): v for k, v in recent_years.items()}
+    recent_years = log_aggregate_training_compute[log_aggregate_training_compute.index.isin(range(2020,df.year.max()+1))]
+    recent_log_training_compute_dict = {int(k): v for k, v in recent_years.items()}
 
 
     if 1: #do historical data
-        LOG_AGGREGATE_COMPUTE_DATA['historical aggregate training compute'] = {int(k): v for k, v in log_aggregate_compute.items()}
+        LOG_AGGREGATE_COMPUTE_DATA['historical aggregate training compute'] = {int(k): v for k, v in log_aggregate_training_compute.items()}
+        LOG_AGGREGATE_COMPUTE_DATA['historical aggregate total compute'] = {int(k): v+np.log10(hist_alloc_multiplier) for k, v in log_aggregate_training_compute.items()}
 
 
     if AI2027_EXTRAP:
-        training_usage_2023 = 10**log_aggregate_compute.get(2023)
-        total_usage_2023 = 2 * training_usage_2023
+        training_usage_2023 = 10**LOG_AGGREGATE_COMPUTE_DATA['historical aggregate training compute'].get(2023)
+        total_usage_2023 = 10**LOG_AGGREGATE_COMPUTE_DATA['historical aggregate total compute'].get(2023)
         
         AI_compute_usage={}
         for idx,year in enumerate(range(2024, 2029)):
@@ -269,23 +283,12 @@ if 1: #Training compute extrapolation
         log_aggregate_compute_predictions_dict = {year: np.log10(compute) for year, compute in AI_compute_usage.items()}
         LOG_AGGREGATE_COMPUTE_DATA['Total-method 2027'] = log_aggregate_compute_predictions_dict
         
-        '''
-        n_H100es_2023=4e6 #from compute forecast - 4million H100 equivalents
-        h100_util_rate=0.3 
-        h100_fp16_peak_flop_s=1e15
-        h100_fp16_flop_year=h100_fp16_peak_flop_s * (60*60*24*365) * h100_util_rate
-        global_compute_2023=n_H100es_2023 * h100_fp16_flop_year
-
-
-        ftm_share_ai_workloads=2*(2.5*10**(-4)) #need to multiply by two assuming equal allocation 
-        '''
-
 
     if LINEAR_EXTRAP:
         # Fit exponential for extrapolation
         # Linear regression
         x = np.array(list(year_grouped_df.groups.keys())).reshape(-1, 1)
-        y = log_aggregate_compute.values + np.log10(hist_alloc_multiplier) #we're extrapolating total compute by making assumptions about historical allocation
+        y = np.array(list(LOG_AGGREGATE_COMPUTE_DATA['historical aggregate total compute'].values())).reshape(-1, 1)
         reg = LinearRegression().fit(x, y)
 
         # Generate future years for extrapolation
@@ -305,20 +308,21 @@ if 1: #Training compute extrapolation
         assert(FIXED_ALLOCATION+DECREASING_TAU)==1
 
         if FIXED_ALLOCATION:
-            train_alloc,inference_alloc=compute_allocations(tau=fixed_tau)
-            LOG_AGGREGATE_COMPUTE_DATA['aggregate training compute'] = {year: val + np.log(train_alloc) for year, val in LOG_AGGREGATE_COMPUTE_DATA[f"Total-{method_choice}"].items()}
-            LOG_AGGREGATE_COMPUTE_DATA['aggregate inference compute'] = {year: val + np.log(inference_alloc) for year, val in LOG_AGGREGATE_COMPUTE_DATA[f"Total-{method_choice}"].items()}
+            train_alloc,inference_alloc=tau_to_alloc(tau=fixed_tau)
+            LOG_AGGREGATE_COMPUTE_DATA['aggregate training compute'] = {year: val + np.log10(train_alloc) for year, val in LOG_AGGREGATE_COMPUTE_DATA[f"Total-{method_choice}"].items()}
+            LOG_AGGREGATE_COMPUTE_DATA['aggregate inference compute'] = {year: val + np.log10(inference_alloc) for year, val in LOG_AGGREGATE_COMPUTE_DATA[f"Total-{method_choice}"].items()}
         
         if DECREASING_TAU:
-            print('DECREASING TAU')
+
+        
             train_alloc_dict = {}
             inference_alloc_dict = {}
             
             for year, val in LOG_AGGREGATE_COMPUTE_DATA[f'Total-{method_choice}'].items():
                 tau = tau_dict.get(year, 1.0) #gets key; if key not found, default to 1
-                train_alloc, inference_alloc = compute_allocations(tau=tau); logging.info(f"tau: {tau}, train_alloc: {train_alloc}, inference_alloc: {inference_alloc}")
-                train_alloc_dict[year] = val + np.log10(train_alloc)
-                inference_alloc_dict[year] = val + np.log10(inference_alloc)
+                train_alloc, inference_alloc = compute_allocations(tau=tau)
+                train_alloc_dict[year] = val + np.log10(train_alloc) #multiply by alloc
+                inference_alloc_dict[year] = val + np.log10(inference_alloc) #multiply by alloc
                 
             LOG_AGGREGATE_COMPUTE_DATA['aggregate training compute'] = train_alloc_dict
             LOG_AGGREGATE_COMPUTE_DATA['aggregate inference compute'] = inference_alloc_dict
@@ -385,18 +389,19 @@ if 1: #Training compute extrapolation
         plt.xticks(years)
          
 if 1: #Generate compute samples
-    #get compute_alloc fits
+
+    #get compute_alloc parameters
     fit_years=np.arange(2020,df.year.max()+1)
     FIT_DATA={year:None for year in fit_years}
 
     logging.info('Fitting f_M coefficients')
     for idx,year in enumerate(fit_years):
-        total_compute=aggregate_compute[aggregate_compute.index==year].values
+        total_training_compute=10**(LOG_AGGREGATE_COMPUTE_DATA['historical aggregate training compute'][year])
         datapoints_year=df[df['date'].dt.year==year]['compute']
         mean_log_compute=np.log10(datapoints_year).mean()
 
         sorted_computes=np.sort(datapoints_year)
-        norm_factor=total_compute[0]
+        norm_factor=total_training_compute
         norm_sorted_computes=sorted_computes/norm_factor
         cumsum=np.cumsum(sorted_computes)
         norm_cumsum=cumsum/norm_factor
@@ -417,14 +422,8 @@ if 1: #Generate compute samples
         FIT_DATA[year]['f_m_coeffs'] = [reg.coef_[0], reg.intercept_]
 
 
-
-    ##generate compute samples
-    ##compute allocation parameters
-
-
     default_fm_grad,default_fm_int=np.mean([FIT_DATA[year]['f_m_coeffs'][0] for year in FIT_DATA]),np.mean([FIT_DATA[year]['f_m_coeffs'][1] for year in FIT_DATA])
     assert(CONST_FM+LIN_EXTRAP_FM+CUSTOM_FM)==1, "Only one of CONST_FM, LIN_EXTRAP_FM, or CUSTOM_FM can be True"
-
 
     #compute allocation parameters
     if CONST_FM:
@@ -433,6 +432,8 @@ if 1: #Generate compute samples
         pass
 
 
+
+    #do random_sampling
     all_years=np.concatenate([fit_years, pred_years.astype(int).ravel()])
 
     COMPUTE_SAMPLE_DATA={int(year):{} for year in all_years} #all years because we're also retrodicting
@@ -484,9 +485,8 @@ if 1: #Generate compute samples
             while running_tot<1:
                 #SAMPLE
                 if bin_sampling_method=='random':
-                    sample = np.random.uniform(allocnorm_model_bin_lb, allocnorm_model_bin_ub)
-                elif bin_sampling_method=='exp':
-                    sample  = sample_from_exp_dist(a=allocnorm_model_bin_lb,b=allocnorm_model_bin_ub,k=k)
+                    sample = (np.random.uniform(allocnorm_model_bin_lb, allocnorm_model_bin_ub))
+                    sample = float(sample) if isinstance(sample, np.ndarray) else sample
 
                 #SUM CHECK
                 if running_tot + sample > 1:
@@ -600,6 +600,7 @@ if 1: # threshold counting
             for width in threshold_widths:
                 threshold = 10**width
                 count = sum(abs(np.log10(model) - np.log10(frontier)) <= width for model in period_samples)
+                logging.debug(f"Period: {period}, Frontier size: {frontier}, Threshold width: {width}, Count: {count}")
                 frontier_counts[width][period] = count
 
     # Convert to DataFrame
@@ -611,7 +612,6 @@ if 1: # threshold counting
     for width in threshold_widths:
         col = f'Within {width} OOM'
         yearly_counts[col] = df_frontier.groupby(df_frontier.index.year)[col].sum()
-
 
     df_frontier_yearly = pd.DataFrame(yearly_counts)
     df_frontier_yearly = df_frontier_yearly.transpose()
@@ -760,7 +760,9 @@ if 1: #display and save
         current_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         # Save tables to results file
         with open(f'results/{current_date}_thresholds.csv', 'w') as f:
-            f.write(f"Config: {SAVE_CONFIG}\n\n")
+            for key, value in SAVE_CONFIG.items():
+                f.write(f"{key}: {value}\n")
+            f.write("\n")
             f.write("Absolute Threshold Predicted:\n")
             absolute_threshold_predicted.to_csv(f,sep='\t')
             f.write('\n\n')

@@ -6,3 +6,4 @@ scratch_files/
 .DS_Store
 .ipynb_checkpoints/
 results/
+logs/
