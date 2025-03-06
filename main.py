@@ -320,7 +320,7 @@ if 1: #Training compute extrapolation
             
             for year, val in LOG_AGGREGATE_COMPUTE_DATA[f'Total-{method_choice}'].items():
                 tau = tau_dict.get(year, 1.0) #gets key; if key not found, default to 1
-                train_alloc, inference_alloc = compute_allocations(tau=tau)
+                train_alloc, inference_alloc = tau_to_alloc(tau=tau)
                 train_alloc_dict[year] = val + np.log10(train_alloc) #multiply by alloc
                 inference_alloc_dict[year] = val + np.log10(inference_alloc) #multiply by alloc
                 
@@ -370,9 +370,9 @@ if 1: #Training compute extrapolation
         train_allocs = []
         inference_allocs = []
         if FIXED_ALLOCATION:
-            train_allocs,inference_allocs = compute_allocations(tau=fixed_tau*np.ones(len(pred_years)))
+            train_allocs,inference_allocs = tau_to_alloc(tau=fixed_tau*np.ones(len(pred_years)))
         if DECREASING_TAU:
-            train_allocs, inference_allocs = compute_allocations(tau=np.array(list(tau_dict.values())))
+            train_allocs, inference_allocs = tau_to_alloc(tau=np.array(list(tau_dict.values())))
 
 
         plt.plot(years, train_allocs, 'g-', label='Training Allocation')
@@ -430,8 +430,6 @@ if 1: #Generate compute samples
         fm_grad,fm_int = np.mean([FIT_DATA[year]['f_m_coeffs'][0] for year in FIT_DATA]),np.mean([FIT_DATA[year]['f_m_coeffs'][1] for year in FIT_DATA])
     if LIN_EXTRAP_FM:
         pass
-
-
 
     #do random_sampling
     all_years=np.concatenate([fit_years, pred_years.astype(int).ravel()])
