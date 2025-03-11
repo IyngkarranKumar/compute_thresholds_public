@@ -13,12 +13,12 @@ if 1: #===IMPORTS===
     # Generate log file name based on current date and time
     log_filename = datetime.now().strftime('logs/%Y-%m-%d_%H-%M-%S.log')
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG,
         format='%(asctime)s - %(levelname)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S',
         handlers=[
             logging.FileHandler(log_filename),
-            #logging.StreamHandler()
+            logging.StreamHandler()
         ]
 
     )
@@ -47,7 +47,7 @@ if 1: #===IMPORTS===
         logging.error(f"Error during imports: {str(e)}")
 
     np.random.seed(42)
-    #warnings.filterwarnings("ignore")
+    warnings.filterwarnings("ignore")
 
 if 1: #UTILS
 
@@ -94,10 +94,6 @@ if 1: #UTILS
         train_alloc=alloc_ratio/(1+alloc_ratio)
         inference_alloc=1-train_alloc
         return train_alloc, inference_alloc
-
-
-
-
 
 if 1: #===CONFIG===
 
@@ -150,11 +146,13 @@ if 1: #===CONFIG===
             2028:0.5,
             2029:0.4
         }
+    constraint_point=(1,1) #point that linear fits must go through
     
     #individual model size parameters
-    min_norm_m, max_norm_m = 10**-5, 0.1
-    log_min_norm_m = np.log10(min_norm_m) #the smallest model to allocate compute to is ~1e-8 the size of total compute spending that year
-    log_max_norm_m = np.log10(max_norm_m) #free param - assume that largest model that year is no larger than 10% of total training compute (can find this from historic data and so sensitivity analysis)
+    min_norm_m = 1e-8 #as a fraction of largest model
+    largest_model_total_compute_ratio=0.35
+
+    n_catgs=9
     bin_sampling_method='random'
 
     #threshold counting config
@@ -333,7 +331,6 @@ if 1: #Training compute extrapolation
             LOG_AGGREGATE_COMPUTE_DATA['aggregate inference compute'] = {year: val + np.log10(inference_alloc) for year, val in LOG_AGGREGATE_COMPUTE_DATA[f"Total-{method_choice}"].items()}
         
         if DYNAMIC_ALLOCATION:
-
         
             train_alloc_dict = {}
             inference_alloc_dict = {}
@@ -415,41 +412,38 @@ if 1: #Generate compute samples
     FIT_DATA={year:None for year in fit_years}
 
     logging.info('Fitting f_M coefficients')
+    
     for idx,year in enumerate(fit_years):
-        total_training_compute=10**(LOG_AGGREGATE_COMPUTE_DATA['historical aggregate training compute'][year])
+        total_compute=aggregate_training_compute[year]
         datapoints_year=df[df['date'].dt.year==year]['compute']
         mean_log_compute=np.log10(datapoints_year).mean()
+        norm_factor_model=datapoints_year.max()
+        norm_factor_total=total_compute
 
         sorted_computes=np.sort(datapoints_year)
-        norm_factor=total_training_compute
-        norm_sorted_computes=sorted_computes/norm_factor
+        norm_sorted_computes=sorted_computes/norm_factor_model
         cumsum=np.cumsum(sorted_computes)
-        norm_cumsum=cumsum/norm_factor
+        norm_cumsum=cumsum/norm_factor_total
 
         #store data 
         FIT_DATA[year]={
         'compute':sorted_computes,
         'cumulative_sum':cumsum,
-        'norm_factor':norm_factor,
+        'norm_factor_total':norm_factor_total,
+        'norm_factor_model':norm_factor_model,
         'f_m_coeffs':None,
                 }
         
         #fit data
         X = np.log10(norm_sorted_computes).reshape(-1, 1)
         y = np.log10(norm_cumsum)
-        reg = LinearRegression().fit(X, y)
+        X_trans,y_trans=X-constraint_point[0],y-constraint_point[1]
+        reg = linear_model.LinearRegression(fit_intercept=False).fit(X_trans, y_trans) #forcing X-a,y-b to go through (0,0) means X,y goes through (a,b)
         FIT_DATA[year]['fit data'] = (X.ravel(),y.ravel())
         FIT_DATA[year]['f_m_coeffs'] = [reg.coef_[0], reg.intercept_]
 
 
-    default_fm_grad,default_fm_int=np.mean([FIT_DATA[year]['f_m_coeffs'][0] for year in FIT_DATA]),np.mean([FIT_DATA[year]['f_m_coeffs'][1] for year in FIT_DATA])
     assert(CONST_FM+LIN_EXTRAP_FM+CUSTOM_FM)==1, "Only one of CONST_FM, LIN_EXTRAP_FM, or CUSTOM_FM can be True"
-
-    #compute allocation parameters
-    if CONST_FM:
-        fm_grad,fm_int = np.mean([FIT_DATA[year]['f_m_coeffs'][0] for year in FIT_DATA]),np.mean([FIT_DATA[year]['f_m_coeffs'][1] for year in FIT_DATA])
-    if LIN_EXTRAP_FM:
-        pass
 
     #do random_sampling
     all_years=np.concatenate([fit_years, pred_years.astype(int).ravel()])
@@ -461,16 +455,15 @@ if 1: #Generate compute samples
         if year in fit_years:
             log_agg_training_compute=LOG_AGGREGATE_COMPUTE_DATA["historical aggregate training compute"][year]
         if year in pred_years:
-            log_agg_training_compute=LOG_AGGREGATE_COMPUTE_DATA[f"aggregate training compute"][year]
-            
+            log_agg_training_compute=LOG_AGGREGATE_COMPUTE_DATA["aggregate training compute"][year]
         agg_training_compute=10**log_agg_training_compute #total compute used over the year
 
-        #model sizes (as fraction of T_tot)
-        norm_ms = np.logspace(log_min_norm_m,log_max_norm_m,2*(int(log_max_norm_m)-int(log_min_norm_m))+1)
+        #model sizes (as fraction of largest_model)
+        norm_ms = np.logspace(np.log10(min_norm_m),np.log10(1.0),num=n_catgs) #model sizes as fraction of largest model
         log_norm_ms = np.log10(norm_ms)
 
         if CONST_FM: 
-            fm_grad,fm_int=default_fm_grad,default_fm_int
+            fm_grad,fm_int=np.mean([FIT_DATA[year]['f_m_coeffs'][0] for year in FIT_DATA]),np.mean([FIT_DATA[year]['f_m_coeffs'][1] for year in FIT_DATA])
         elif LIN_EXTRAP_FM:
             raise NotImplementedError("Linear extrapolation of fm_grad and fm_int not implemented")
         elif CUSTOM_FM:
@@ -479,31 +472,34 @@ if 1: #Generate compute samples
             fm_grad,fm_int=FIT_DATA[year]['f_m_coeffs']
 
         log_frac_cum_compute = fm_grad*log_norm_ms + fm_int
-        cum_fm=10**log_frac_cum_compute
+        frac_cum_compute=10**log_frac_cum_compute
 
         model_ctgs = [f'{norm_ms[i]:.2e}--{norm_ms[i+1]:.2e}' for i in range(len(norm_ms)-1)]
-        f_m = np.diff(cum_fm) #we don't include compute alloc to models 1e-8 smaller than total compute
+        f_m = np.diff(frac_cum_compute) #we don't include compute alloc to models 1e-8 smaller than total compute
+        logging.debug(f'Sum f_m: {np.sum(f_m)}')
         bin_compute_allocs=f_m*agg_training_compute #array of how much compute allocated to each bin
         DATA_alloc={model_ctgs[i]:
                     {'compute alloc':bin_compute_allocs[i]} for i in range(len(model_ctgs))}
         
         compute_samples_rand=[]
-
+    
+        #iterate over different bins sizes
         for idx,(ctg,alloc) in enumerate(list(zip(model_ctgs,bin_compute_allocs))):
             #here alloc is the amount of alloc given to each individual bin
-
             bounds = ctg.split('--')
+            largest_model=largest_model_total_compute_ratio*agg_training_compute
             norm_model_bin_lb,norm_model_bin_ub = float(bounds[0]),float(bounds[1])
-            model_bin_lb,model_bin_ub = agg_training_compute*norm_model_bin_lb, agg_training_compute*norm_model_bin_ub #normalising factor is total training compute
-            allocnorm_model_bin_lb,allocnorm_model_bin_ub=model_bin_lb/alloc, model_bin_ub/alloc
+            model_bin_lb,model_bin_ub = largest_model*norm_model_bin_lb, largest_model*norm_model_bin_ub #normalising factor is total training compute
+            assert(alloc>model_bin_ub)
 
             #not generating multiple samples yet for CIs
+            allocnorm_model_bin_lb,allocnorm_model_bin_ub=model_bin_lb/alloc, model_bin_ub/alloc #this is purely just for samplign; no physical meaning
             running_tot=0
             allocnormed_samples=[] 
             while running_tot<1:
                 #SAMPLE
                 if bin_sampling_method=='random':
-                    sample = (np.random.uniform(allocnorm_model_bin_lb, allocnorm_model_bin_ub))
+                    sample = np.random.uniform(allocnorm_model_bin_lb, allocnorm_model_bin_ub)
                     sample = float(sample) if isinstance(sample, np.ndarray) else sample
 
                 #SUM CHECK
@@ -514,15 +510,13 @@ if 1: #Generate compute samples
                     allocnormed_samples.append(sample)
                     running_tot += sample
 
-            #print(f"Model category {ctg} adds {len(allocnormed_samples)} models")
             compute_samples_rand = compute_samples_rand + (list(alloc*np.array(allocnormed_samples)))
 
-
-        compute_samples_rand = [x for x in compute_samples_rand if x!=0]
+        compute_samples_rand = [x for x in compute_samples_rand if x!=0] #remove 0s
 
         COMPUTE_SAMPLE_DATA[year]['samples']=compute_samples_rand
         COMPUTE_SAMPLE_DATA[year]['date']=[decimal_year_to_date(year+np.random.random()) for _ in compute_samples_rand] #conver to stand pd datetime format
-
+        COMPUTE_SAMPLE_DATA[year]['largest model']=largest_model
 
 
     logging.debug("Number of samples per year:")
