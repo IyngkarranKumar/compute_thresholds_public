@@ -2,10 +2,13 @@
 
 
 
+
 if 1: #===IMPORTS===
         
     import logging, time, os
     from datetime import datetime
+
+    logging.getLogger().handlers.clear()
 
     # Generate log file name based on current date and time
     log_filename = datetime.now().strftime('logs/%Y-%m-%d_%H-%M-%S.log')
@@ -17,8 +20,8 @@ if 1: #===IMPORTS===
             logging.FileHandler(log_filename),
             #logging.StreamHandler()
         ]
+
     )
-    logger = logging.getLogger()
 
 
     start_time = time.time()
@@ -44,77 +47,7 @@ if 1: #===IMPORTS===
         logging.error(f"Error during imports: {str(e)}")
 
     np.random.seed(42)
-    warnings.filterwarnings("ignore")
-
-if 1: #===CONFIG===
-
-    #workflow config
-    PLOT_SCHEMATIC_SCATTER=False
-    TOTAL_COMPUTE_PLOT=False
-    PLOT_SAMPLE_KDES=False
-    PLOT_SAMPLE_SCATTERS=False
-    SAVE_RESULTS=False
-
-    #training compute extrapolation config 
-    LINEAR_EXTRAP=True
-    AI2027_EXTRAP=True
-    method_choice="linear extrapolation" #['linear extrapolation', 'method 2027']
-    g_global_AI_compute=2.25
-    g_AI_workload_share=2.0 #assuming AI_compute_usage/AI_compute_capacity = const - 3.0 gets the two superposed!
-
-
-    #allocation config
-    hist_alloc=50/50 #historical ratio of traiinng to inference
-    hist_alloc_multiplier=1+1/hist_alloc
-    FIXED_ALLOCATION,fixed_tau=False,1 #tau=1 is 50/50 alloc
-    DECREASING_TAU=True #inference scaling continues improving
-    tau_dict = {
-        2024: 0.1,
-        2025: 0.1,
-        2026: 0.1,
-        2027: 0.1,
-        2028: 0.1,
-    }
-
-    #generate samples config
-    CONST_FM=True #we take the mean of the f_m and f_int
-    LIN_EXTRAP_FM=False
-    CUSTOM_FM=False
-    if CUSTOM_FM:
-        fm_grad_dict={
-            2024:1.1,
-            2025:1.1,
-            2026:1.1,
-            2027:1.1,
-            2028:1.1,
-            2029:1.1
-        }
-        fm_int_dict={
-            2024:0.9,
-            2025:0.8,
-            2026:0.7,
-            2027:0.6,
-            2028:0.5,
-            2029:0.4
-        }
-    #individual model size parameters
-    log_min_norm_m = np.log10(1e-8) #the smallest model to allocate compute to is ~1e-8 the size of total compute spending that year
-    log_max_norm_m = np.log10(1e-1) #free param - assume that largest model that year is no larger than 10% of total training compute (can find this from historic data and so sensitivity analysis)
-    bin_sampling_method='random'
-
-    #threshold counting config
-    thresholds=[25, 26, 27, 28, 29, 30]
-    threshold_widths = [0.5, 1, 1.5]  # List of threshold widths to analyze
-    period_freq = '6M'  # frequency for doing frontier counts
-    retrodict_thresholds=[23, 24, 25]
-
-    SAVE_CONFIG={
-        "compute extrapolation method":method_choice,
-        "historical allocation":hist_alloc if method_choice=='linear extrapolation' else None,
-        "(g_global_AI_compute, g_AI_workload_share)":(g_global_AI_compute, g_AI_workload_share) if method_choice=='method 2027' else None,
-        "compute allocation config":'decreasing tau' if DECREASING_TAU else 'fixed tau',
-        "tau": tau_dict if DECREASING_TAU else fixed_tau,
-    }
+    #warnings.filterwarnings("ignore")
 
 if 1: #UTILS
 
@@ -155,6 +88,93 @@ if 1: #UTILS
         tau = train_alloc/(1-train_alloc)
         return tau
 
+    def alloc_ratio_to_alloc(alloc_ratio):
+        #note - assumes alloc_rati = train/inf
+        alloc_ratio=np.array(alloc_ratio)
+        train_alloc=alloc_ratio/(1+alloc_ratio)
+        inference_alloc=1-train_alloc
+        return train_alloc, inference_alloc
+
+
+
+
+
+if 1: #===CONFIG===
+
+    #workflow config
+    PLOT_SCHEMATIC_SCATTER=False
+    TOTAL_COMPUTE_PLOT=False
+    PLOT_SAMPLE_KDES=False
+    PLOT_SAMPLE_SCATTERS=False
+    SAVE_RESULTS=False
+
+    #training compute extrapolation config 
+    LINEAR_EXTRAP=True
+    AI2027_EXTRAP=True
+    method_choice="method 2027" #['linear extrapolation', 'method 2027']
+    g_global_AI_compute=2.25 #AI 2027
+    g_AI_workload_share=1.5 #AI 2027
+
+
+    #allocation config
+    hist_alloc=40/60 #AI 2027
+    hist_alloc_multiplier=1+1/hist_alloc
+    FIXED_ALLOCATION,fixed_alloc=True, 40/60 #tau=1 is 50/50 alloc
+    DYNAMIC_ALLOCATION=False #inference scaling continues improving
+    pred_alloc_dict = {
+        2024: 40/60,
+        2025: 30/70,
+        2026: 30/70,
+        2027: 20/80,
+        2028: 20/80,
+    }
+
+    #generate samples config
+    CONST_FM=True #we take the mean of the f_m and f_int
+    LIN_EXTRAP_FM=False
+    CUSTOM_FM=False
+    if CUSTOM_FM:
+        fm_grad_dict={
+            2024:1.1,
+            2025:1.1,
+            2026:1.1,
+            2027:1.1,
+            2028:1.1,
+            2029:1.1
+        }
+        fm_int_dict={
+            2024:0.9,
+            2025:0.8,
+            2026:0.7,
+            2027:0.6,
+            2028:0.5,
+            2029:0.4
+        }
+    
+    #individual model size parameters
+    min_norm_m, max_norm_m = 10**-5, 0.1
+    log_min_norm_m = np.log10(min_norm_m) #the smallest model to allocate compute to is ~1e-8 the size of total compute spending that year
+    log_max_norm_m = np.log10(max_norm_m) #free param - assume that largest model that year is no larger than 10% of total training compute (can find this from historic data and so sensitivity analysis)
+    bin_sampling_method='random'
+
+    #threshold counting config
+    thresholds=[25, 26, 27, 28, 29, 30]
+    threshold_widths = [0.5, 1, 1.5]  # List of threshold widths to analyze
+    period_freq = '6M'  # frequency for doing frontier counts
+    retrodict_thresholds=[23, 24, 25]
+
+    SAVE_CONFIG={
+        "compute extrapolation method":method_choice,
+        "historical allocation":hist_alloc,
+        "(g_global_AI_compute, g_AI_workload_share)":(g_global_AI_compute, g_AI_workload_share) if method_choice=='method 2027' else None,
+        "compute allocation config": "dynamic inference allocation" if DYNAMIC_ALLOCATION else "fixed inference allocation",
+        "allocations": pred_alloc_dict if DYNAMIC_ALLOCATION else fixed_alloc,
+        "min_norm_m":min_norm_m,
+        "max_norm_m":max_norm_m,
+    }
+
+
+
 if 1: #===DATA LOADING===
     #Feb 2025 dataset
 
@@ -181,39 +201,39 @@ if 1: #===DATA LOADING===
 
 
     # Print stats for full dataset
-    print("=== Full Dataset ===")
-    print("Most recent date:", df["date"].max())
-    print("\nDatapoints per year:")
+    logging.info("=== Full Dataset ===")
+    logging.info("Most recent date: %s", df["date"].max())
+    logging.debug("\nDatapoints per year:")
     for year in range(2017, 2025):
         count = len(df[df["year"] == year])
-        print(f"{year}: {count}")
+        logging.debug("%d: %d", year, count)
 
     max_compute_idx = df['compute'].idxmax()
-    print(f"\nLargest compute value: {df.loc[max_compute_idx, 'compute']:.2e} ({df.loc[max_compute_idx, 'model']})")
+    logging.info("\nLargest compute value: %.2e (%s)", df.loc[max_compute_idx, 'compute'], df.loc[max_compute_idx, 'model'])
     # Create dataset without specified years
     years_to_exclude = [2025, 2024]  # List of years to exclude
     df_filtered = df[~df["year"].isin(years_to_exclude)].copy()
 
-    print(f"\n=== Dataset excluding years {years_to_exclude} ===")
-    print("Most recent date:", df_filtered["date"].max())
-    print("\nDatapoints per year:")
-    for year in range(2017, 2024):
-        count = len(df_filtered[df_filtered["year"] == year])
-        print(f"{year}: {count}")
+    logging.info("\n=== Dataset excluding years %s ===", years_to_exclude)
+    logging.info("Most recent date: %s", df_filtered["date"].max())
 
     max_compute_idx = df_filtered['compute'].idxmax()
-    print(f"\nLargest compute value: {df_filtered.loc[max_compute_idx, 'compute']:.2e} ({df_filtered.loc[max_compute_idx, 'model']})")
+    logging.info("\nLargest compute value: %.2e (%s)", df_filtered.loc[max_compute_idx, 'compute'], df_filtered.loc[max_compute_idx, 'model'])
 
     df = df_filtered
 
     # Report number of entries before removing NaN
-    print(f"\n\n Number of entries before removing rows with compute=NaN: {len(df)}")
-
+    logging.info("\n\n Number of entries before removing rows with compute=NaN: %d", len(df))
     # Remove rows with NaN in compute column
     df = df.dropna(subset=['compute'])
-
     # Report number of entries after removing rows with compute=NaN
-    print(f"Number of entries after removing rows with compute=NaN: {len(df)}")
+    logging.info("Number of entries after removing rows with compute=NaN: %d", len(df))
+
+    # Log datapoints per year in the dataframe after removing NaN compute values
+    logging.info("\nDatapoints per year after removing rows with compute=NaN:")
+    for year in range(2017, 2025):
+        count = len(df[df["year"] == year])
+        logging.info("%d: %d", year, count)
 
     
     if PLOT_SCHEMATIC_SCATTER: #generate basic scatterplot
@@ -294,7 +314,7 @@ if 1: #Training compute extrapolation
         # Generate future years for extrapolation
         pred_years = np.arange(df.year.max()+1, 2029)
         # Get predictions
-        log_aggregate_compute_predictions = reg.predict(pred_years.reshape(-1, 1))
+        log_aggregate_compute_predictions = reg.predict(pred_years.reshape(-1, 1)).ravel()
         log_aggregate_compute_predictions_dict = {int(year): pred for year, pred in zip(pred_years.flatten(), log_aggregate_compute_predictions)}
 
         # Combine historical and predicted data
@@ -305,22 +325,22 @@ if 1: #Training compute extrapolation
 
     #do allocations
     if 1: 
-        assert(FIXED_ALLOCATION+DECREASING_TAU)==1
+        assert(FIXED_ALLOCATION+DYNAMIC_ALLOCATION)==1
 
         if FIXED_ALLOCATION:
-            train_alloc,inference_alloc=tau_to_alloc(tau=fixed_tau)
+            train_alloc,inference_alloc=alloc_ratio_to_alloc(alloc_ratio=fixed_alloc)
             LOG_AGGREGATE_COMPUTE_DATA['aggregate training compute'] = {year: val + np.log10(train_alloc) for year, val in LOG_AGGREGATE_COMPUTE_DATA[f"Total-{method_choice}"].items()}
             LOG_AGGREGATE_COMPUTE_DATA['aggregate inference compute'] = {year: val + np.log10(inference_alloc) for year, val in LOG_AGGREGATE_COMPUTE_DATA[f"Total-{method_choice}"].items()}
         
-        if DECREASING_TAU:
+        if DYNAMIC_ALLOCATION:
 
         
             train_alloc_dict = {}
             inference_alloc_dict = {}
             
             for year, val in LOG_AGGREGATE_COMPUTE_DATA[f'Total-{method_choice}'].items():
-                tau = tau_dict.get(year, 1.0) #gets key; if key not found, default to 1
-                train_alloc, inference_alloc = tau_to_alloc(tau=tau)
+                alloc_ratio = pred_alloc_dict.get(year, 1.0) #gets key; if key not found, default to 1
+                train_alloc, inference_alloc = alloc_ratio_to_alloc(alloc_ratio=alloc_ratio)
                 train_alloc_dict[year] = val + np.log10(train_alloc) #multiply by alloc
                 inference_alloc_dict[year] = val + np.log10(inference_alloc) #multiply by alloc
                 
@@ -370,9 +390,9 @@ if 1: #Training compute extrapolation
         train_allocs = []
         inference_allocs = []
         if FIXED_ALLOCATION:
-            train_allocs,inference_allocs = tau_to_alloc(tau=fixed_tau*np.ones(len(pred_years)))
-        if DECREASING_TAU:
-            train_allocs, inference_allocs = tau_to_alloc(tau=np.array(list(tau_dict.values())))
+            train_allocs,inference_allocs = alloc_ratio_to_alloc(alloc_ratio=fixed_alloc*np.ones(len(pred_years)))
+        if DYNAMIC_ALLOCATION:
+            train_allocs, inference_allocs = alloc_ratio_to_alloc(alloc_ratio=np.array(list(pred_alloc_dict.values())))
 
 
         plt.plot(years, train_allocs, 'g-', label='Training Allocation')
@@ -505,9 +525,9 @@ if 1: #Generate compute samples
 
 
 
-    logging.info("Number of samples per year:")
+    logging.debug("Number of samples per year:")
     for year in pred_years.ravel():
-        print(f"{year}: {len(COMPUTE_SAMPLE_DATA[year]['samples'])} samples")
+        logging.debug(f"{year}: {len(COMPUTE_SAMPLE_DATA[year]['samples'])} samples")
 
             
 
@@ -560,7 +580,6 @@ if 1: # threshold counting
     for idx in df_counts.index:
         df_counts_cumulative.loc[idx] = df_counts.loc[idx].cumsum()
 
-    print("\n\n\n\n\n")
     #display(df_counts_cumulative)
     absolute_threshold_predicted=df_counts_cumulative
 
@@ -743,9 +762,14 @@ if 1: #backtesting
     #display(combined_df)
 
 if 1: #display and save
+    logging.info("Displaying results...\n")
+    logging.info("Absolute Threshold Predicted:")
     display(absolute_threshold_predicted)
+    logging.info("Frontier Threshold Predicted:")
     display(frontier_threshold_predicted)
+    logging.info("Absolute Threshold Retrodicted:")
     display(absolute_threshold_retrodicted)
+    logging.info("Frontier Threshold Retrodicted:")
     display(frontier_threshold_retrodicted)
     
 
