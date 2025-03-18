@@ -7,3 +7,4 @@ scratch_files/
 .ipynb_checkpoints/
 logs/
 test.py
+results/
