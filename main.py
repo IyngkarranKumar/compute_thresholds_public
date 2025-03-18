@@ -1,6 +1,6 @@
 
 
-def main(g=2.25,ratio=0.3,fm=1.0):
+def main():
 
     if 1: #===IMPORTS===
             
@@ -22,47 +22,34 @@ def main(g=2.25,ratio=0.3,fm=1.0):
 
         )
 
-
+        import time
         start_time = time.time()
+        logging.info("Starting imports...")
+        import numpy as np
+        from scipy import stats, optimize
+        import matplotlib.pyplot as plt
+        import pandas as pd #taking long to load here
+        import seaborn as sns
+        import itertools
+        import copy,re, pdb, logging
+        from sklearn import linear_model
+        from collections import defaultdict
+        import warnings
+        
+        end_time = time.time()
+        logging.info(f"Imports completed in {end_time - start_time:.2f} seconds")
+            
 
-        try:
-            logging.info("Starting imports...")
-            import numpy as np
-            from scipy import stats, optimize
-            from sklearn import linear_model
-            from IPython.display import display
-            import matplotlib.pyplot as plt
-            import pandas as pd
-            import seaborn as sns
-            import itertools
-            from datetime import datetime
-            import copy,re, pdb, warnings, os
-            
-            end_time = time.time()
-            logging.info(f"Imports completed in {end_time - start_time:.2f} seconds")
-            
-            
-        except Exception as e:
-            logging.error(f"Error during imports: {str(e)}")
-
-        np.random.seed(42)
+        np.random.seed(None)
         warnings.filterwarnings("ignore")
 
     if 1: #UTILS
 
+        #util funcs cell
         def norm_exp_func(x,a,b,k):
             norm_factor=(1/k)*(np.exp(k*b)-np.exp(k*a))
             return (1/norm_factor)*np.exp(k*x)
 
-        def sample_from_exp_dist(a,b,k,spacing='linear'):
-            x=np.linspace(a,b,10000) #might need to change this to logspace
-            dx=x[1]-x[0] #differnt if logspace
-            pdf=norm_exp_func(x,a,b,k=k)
-            assert(round(sum(pdf*dx),2)==1) #sanity check on probability dist
-            prob_dist=pdf*dx
-            prob_dist=prob_dist/np.sum(prob_dist) #ensure that sums exactly to 1 for use with np.random.choice
-
-            return np.random.choice(x,p=prob_dist)
 
         def decimal_year_to_date(decimal_year):
             if isinstance(decimal_year, pd.Series):
@@ -76,17 +63,6 @@ def main(g=2.25,ratio=0.3,fm=1.0):
             return pd.Timestamp(year,1,1)+pd.Timedelta(days=days)
 
 
-        def tau_to_alloc(tau,inverse=False):
-            tau = np.array(tau)
-            train_alloc = tau/(tau+1)
-            inference_alloc = 1/(tau+1)
-            return train_alloc, inference_alloc
-        
-        def alloc_to_tau(train_alloc):
-            train_alloc=np.array(train_alloc)
-            tau = train_alloc/(1-train_alloc)
-            return tau
-
         def alloc_ratio_to_alloc(alloc_ratio):
             #note - assumes alloc_rati = train/inf
             alloc_ratio=np.array(alloc_ratio)
@@ -94,70 +70,98 @@ def main(g=2.25,ratio=0.3,fm=1.0):
             inference_alloc=1-train_alloc
             return train_alloc, inference_alloc
 
+        def round_dates(dates, freq):
+            #from Claude; unsure how this works
+            if freq == '6M':
+                return dates.map(lambda d: d.replace(day=1) + pd.offsets.MonthEnd(6 - (d.month - 1) % 6))
+            elif freq == '3M':
+                return dates.map(lambda d: d.replace(day=1) + pd.offsets.MonthEnd(3 - (d.month - 1) % 3))
+            elif freq == '1M':
+                return dates.map(lambda d: d.replace(day=1) + pd.offsets.MonthEnd(1))
+            elif freq == '1Y':
+                return dates.map(lambda d: d.replace(month=1, day=1) + pd.offsets.YearEnd())
+            else:
+                raise ValueError("Unsupported frequency")
+
+        def truncated_normal(mean,std_dev,min=None,max=None,size=1):
+            if min is None: min = mean-3*std_dev
+            if max is None: max = mean+3*std_dev
+            samples = np.random.normal(mean, std_dev, size)
+            return np.clip(samples, min, max) 
+
+
     if 1: #===CONFIG===
 
         #workflow config
         PLOT_SCHEMATIC_SCATTER=False
-        TOTAL_COMPUTE_PLOT=False
-        PLOT_SAMPLE_KDES=False
-        PLOT_SAMPLE_SCATTERS=False
+        TRAINING_COMPUTE_PLOTS=False
+        FIT_ALLOCATION_PLOTS=False
+        GENERATED_SAMPLE_PLOTS=False
         SAVE_RESULTS=False
 
+        #sampling parameters
+        n_simulations = 10 #for bootstrappng, sampling parameters etc. n_simulations = 10 #for bootstrappng, sampling parameters etc. 
+
         #training compute extrapolation config 
-        LINEAR_EXTRAP=True
         AI2027_EXTRAP=True
         method_choice="method 2027" #['linear extrapolation', 'method 2027']
-        g_global_AI_compute=2.25 #AI 2027
-        g_AI_workload_share=2.0 #AI 2027
-
-
-        #allocation config
-        hist_alloc=40/60 #AI 2027
-        hist_alloc_multiplier=1+1/hist_alloc
-        FIXED_ALLOCATION,fixed_alloc=True, 50/50 #tau=1 is 50/50 alloc
+        hist_alloc=1/1
+        hist_alloc_multiplier=1+(1/hist_alloc)
+        FIXED_ALLOCATION=True
+        fixed_alloc=40/60
         DYNAMIC_ALLOCATION=False #inference scaling continues improving
+        assert(FIXED_ALLOCATION+DYNAMIC_ALLOCATION)==1
         pred_alloc_dict = {
-            2024: 40/60,
-            2025: 30/70,
-            2026: 30/70,
-            2027: 20/80,
-            2028: 20/80,
-        }
+                2024: 40/60,
+                2025: 30/70,
+                2026: 30/70,
+                2027: 20/80,
+                2028: 20/80,
+            }
+        g_global_AI_compute_mean=2.5
+        g_AI_workload_share_mean=1.5 #assuming AI_compute_usage/AI_compute_capacity = const - 3.0 gets the two superposed!
+        g_total = g_global_AI_compute_mean + g_AI_workload_share_mean
+        g_stdev=0.0 #get more reasonable values by fixing rather than computing from historical data
 
-        #generate samples config
-        MEAN_FM=True #we take the mean of the f_m and f_int
-        SET_FM,fm_fixed=False,1.0 #we set f_m and f_int to specific values
 
-        constraint_point=(1,1) #point that linear fits must go through
-        
-        #individual model size parameters
-        min_norm_m = 1e-8 #as a fraction of largest model
-        largest_model_total_compute_ratio=0.2
-        n_catgs=8
-        bin_sampling_method='random'
+        #allocation fit parameters
+        fit_years=np.arange(2020,2024)
+        pred_years = np.arange(2024,2029)
+        constraint_point=(1,1)
+        filter_thresholds=1e-20 #ignore models smaller than this
 
-        #threshold counting config
+        ##generate sample parameters
+        CONST_FM=False
+        LIN_EXTRAP_FM=False
+        CUSTOM_FM=True
+        if CUSTOM_FM:
+            custom_fm_grad=1.0 #it would be nicer to set c
+        assert(CONST_FM+LIN_EXTRAP_FM+CUSTOM_FM)==1, "Only one of CONST_FM, LIN_EXTRAP_FM, or CUSTOM_FM can be True"
+
+        #IMPORTANT PARAMETER - largest model share
+        FRONTIER_MODEL_GROWTH="coupled"
+        min_norm_m = 10**-7
+        largest_model_share_mean,lms_stddev,min_lms,max_lms=0.3, 0.2/3,None,None
+
+        n_catgs = 50
+
+
+        #threshold counting PARAMETERS
         thresholds=[25, 26, 27, 28, 29]
         threshold_widths = [0.5, 1, 1.5]  # List of threshold widths to analyze
-        period_freq = '6M'  # frequency for doing frontier counts
+        period_freq = '3M'  # frequency for doing frontier counts
         retrodict_thresholds=[23, 24, 25]
 
-        #main params  (ones we play around with a lot)
-        largest_model_total_compute_ratio=ratio
-        g_global_AI_compute,g_AI_workload_share=g,1.5 #AI 2027
-        fm_fixed=fm
 
-
+        #SAVE CONFIG
         SAVE_CONFIG={
-            "compute extrapolation method":method_choice,
             "historical allocation":hist_alloc,
-            "(g_global_AI_compute, g_AI_workload_share)":(g_global_AI_compute, g_AI_workload_share) if method_choice=='method 2027' else None,
+            "(g_global_AI_compute, g_AI_workload_share)":(g_global_AI_compute_mean, g_AI_workload_share_mean) if method_choice=='method 2027' else None,
             "compute allocation config": "dynamic inference allocation" if DYNAMIC_ALLOCATION else "fixed inference allocation",
             "allocations": pred_alloc_dict if DYNAMIC_ALLOCATION else fixed_alloc,
-            "min_norm_m":min_norm_m,
-            "largest_model_total_compute_ratio":largest_model_total_compute_ratio,
+            "frontier model config": f"lms_mean={largest_model_share_mean}, lms_stddev={lms_stddev}",
             "n_catgs":n_catgs,
-            "fm_fixed":fm_fixed,
+            "allocation":CONST_FM if CONST_FM else LIN_EXTRAP_FM if LIN_EXTRAP_FM else CUSTOM_FM,
         }
 
     if 1: #===DATA LOADING===
@@ -258,105 +262,97 @@ def main(g=2.25,ratio=0.3,fm=1.0):
                 plt.axhline(y=10**exp,color='gray',linestyle='--',alpha=0.6)
 
     if 1: #Training compute extrapolation
-        #total AI relevant compute extrapolations
+                
 
-        assert method_choice in ['linear extrapolation','method 2027']
-
+        ###DATA STRUCTURE INIT
         LOG_AGGREGATE_COMPUTE_DATA={}
 
-        year_grouped_df=df.groupby(df['date'][df['date']>'2010-01-01'].dt.year)
-        aggregate_training_compute=year_grouped_df['compute'].sum()
-        log_aggregate_training_compute=np.log10(aggregate_training_compute)
-
-        recent_years = log_aggregate_training_compute[log_aggregate_training_compute.index.isin(range(2020,df.year.max()+1))]
-        recent_log_training_compute_dict = {int(k): v for k, v in recent_years.items()}
 
 
-        if 1: #do historical data
-            LOG_AGGREGATE_COMPUTE_DATA['historical aggregate training compute'] = {int(k): v for k, v in log_aggregate_training_compute.items()}
-            LOG_AGGREGATE_COMPUTE_DATA['historical aggregate total compute'] = {int(k): v+np.log10(hist_alloc_multiplier) for k, v in log_aggregate_training_compute.items()} #multiplying in log10 space
+        for sim in range(n_simulations):
+            LOG_AGGREGATE_COMPUTE_DATA[sim] = {}
+
+            year_grouped_df=df.groupby(df['date'][df['date']>'2010-01-01'].dt.year)
+            aggregate_compute=year_grouped_df['compute'].sum()
+            log_aggregate_compute=np.log10(aggregate_compute)
+
+            recent_years = log_aggregate_compute[log_aggregate_compute.index.isin(range(2020,df.year.max()+1))]
+            recent_log_compute_dict = {int(k): v for k, v in recent_years.items()}
 
 
-        if AI2027_EXTRAP:
-            training_usage_2023 = 10**LOG_AGGREGATE_COMPUTE_DATA['historical aggregate training compute'].get(2023)
-            total_usage_2023 = 10**LOG_AGGREGATE_COMPUTE_DATA['historical aggregate total compute'].get(2023)
-            
-            AI_compute_usage={}
-            for idx,year in enumerate(range(2024, 2029)):
-                AI_compute_usage[year] = total_usage_2023*(g_global_AI_compute+g_AI_workload_share)**(idx+1)
-            
-            log_aggregate_compute_predictions_dict = {year: np.log10(compute) for year, compute in AI_compute_usage.items()}
-            LOG_AGGREGATE_COMPUTE_DATA['Total-method 2027'] = log_aggregate_compute_predictions_dict
-            
+            if 1: #do historical data
+                LOG_AGGREGATE_COMPUTE_DATA[sim]['historical aggregate training compute'] = {int(k): v for k, v in log_aggregate_compute.items()}
+                LOG_AGGREGATE_COMPUTE_DATA[sim]['historical aggregate total compute'] = {int(k): v+np.log10(hist_alloc_multiplier) for k, v in log_aggregate_compute.items()}
 
-        if LINEAR_EXTRAP:
-            # Fit exponential for extrapolation
-            # Linear regression
-            x = np.array(list(year_grouped_df.groups.keys())).reshape(-1, 1)
-            y = np.array(list(LOG_AGGREGATE_COMPUTE_DATA['historical aggregate total compute'].values())).reshape(-1, 1)
-            reg = linear_model.LinearRegression().fit(x, y)
+            if AI2027_EXTRAP:
+                training_usage_2023 = 10**log_aggregate_compute.get(2023)
+                total_usage_2023 = 2 * training_usage_2023
 
-            # Generate future years for extrapolation
-            pred_years = np.arange(df.year.max()+1, 2029)
-            # Get predictions
-            log_aggregate_compute_predictions = reg.predict(pred_years.reshape(-1, 1)).ravel()
-            log_aggregate_compute_predictions_dict = {int(year): pred for year, pred in zip(pred_years.flatten(), log_aggregate_compute_predictions)}
+                AI_compute_usage={}
+                for idx,year in enumerate(range(2024, 2029)):
+                    AI_compute_usage[year] = total_usage_2023 * (g_total+np.random.normal(0,g_stdev)) ** (idx + 1)
 
-            # Combine historical and predicted data
-            #combined_log_aggregate_compute_dict = dict(sorted({**recent_log_compute_dict, **log_aggregate_compute_predictions_dict}.items()))
-
-            LOG_AGGREGATE_COMPUTE_DATA['Total-linear extrapolation']=log_aggregate_compute_predictions_dict
+                log_aggregate_compute_predictions_dict = {year: np.log10(compute) for year, compute in AI_compute_usage.items()}
+                LOG_AGGREGATE_COMPUTE_DATA[sim]['Total-method 2027'] = log_aggregate_compute_predictions_dict
 
 
-        #do allocations
-        if 1: 
-            assert(FIXED_ALLOCATION+DYNAMIC_ALLOCATION)==1
+            #do allocations
+            if 1: 
+                if FIXED_ALLOCATION:
+                    train_alloc,inference_alloc=alloc_ratio_to_alloc(alloc_ratio=fixed_alloc)
+                    LOG_AGGREGATE_COMPUTE_DATA[sim]['aggregate training compute'] = {year: val + np.log10(train_alloc) for year, val in LOG_AGGREGATE_COMPUTE_DATA[sim][f"Total-{method_choice}"].items()}
+                    LOG_AGGREGATE_COMPUTE_DATA[sim]['aggregate inference compute'] = {year: val + np.log10(inference_alloc) for year, val in LOG_AGGREGATE_COMPUTE_DATA[sim][f"Total-{method_choice}"].items()}
 
-            if FIXED_ALLOCATION:
-                train_alloc,inference_alloc=alloc_ratio_to_alloc(alloc_ratio=fixed_alloc)
-                LOG_AGGREGATE_COMPUTE_DATA['aggregate training compute'] = {year: val + np.log10(train_alloc) for year, val in LOG_AGGREGATE_COMPUTE_DATA[f"Total-{method_choice}"].items()}
-                LOG_AGGREGATE_COMPUTE_DATA['aggregate inference compute'] = {year: val + np.log10(inference_alloc) for year, val in LOG_AGGREGATE_COMPUTE_DATA[f"Total-{method_choice}"].items()}
-            
-            if DYNAMIC_ALLOCATION:
-            
-                train_alloc_dict = {}
-                inference_alloc_dict = {}
-                
-                for year, val in LOG_AGGREGATE_COMPUTE_DATA[f'Total-{method_choice}'].items():
-                    alloc_ratio = pred_alloc_dict.get(year, 1.0) #gets key; if key not found, default to 1
-                    train_alloc, inference_alloc = alloc_ratio_to_alloc(alloc_ratio=alloc_ratio)
-                    train_alloc_dict[year] = val + np.log10(train_alloc) #multiply by alloc
-                    inference_alloc_dict[year] = val + np.log10(inference_alloc) #multiply by alloc
-                    
-                LOG_AGGREGATE_COMPUTE_DATA['aggregate training compute'] = train_alloc_dict
-                LOG_AGGREGATE_COMPUTE_DATA['aggregate inference compute'] = inference_alloc_dict
+                if DYNAMIC_ALLOCATION:
+                    train_alloc_dict = {}
+                    inference_alloc_dict = {}
+
+                    for year, val in LOG_AGGREGATE_COMPUTE_DATA[sim][f'Total-{method_choice}'].items():
+                        alloc_ratio=pred_alloc_dict.get(year,1.0)
+                        train_alloc, inference_alloc = alloc_ratio_to_alloc(alloc_ratio=alloc_ratio)
+                        train_alloc_dict[year] = val + np.log10(train_alloc)
+                        inference_alloc_dict[year] = val + np.log10(inference_alloc)
+
+                    LOG_AGGREGATE_COMPUTE_DATA[sim]['aggregate training compute'] = train_alloc_dict
+                    LOG_AGGREGATE_COMPUTE_DATA[sim]['aggregate inference compute'] = inference_alloc_dict
 
 
-        if TOTAL_COMPUTE_PLOT:
-            plt.figure(figsize=(10,6))
-            
+        if TRAINING_COMPUTE_PLOTS:
+            plt.figure(figsize=(10, 6))
 
             # Plot extrapolations for each method
             colors = {
-                'historical data': 'blue',
-                'Total-linear extrapolation': 'orange',
-                'Total-method 2027': 'purple', 
+                'historical aggregate training compute': 'blue',
+                'historical aggregate total compute': 'cyan',
+                'Total-method 2027': 'purple',
                 'aggregate training compute': 'green',
-                'aggregate inference compute': 'red'
+                'aggregate inference compute': 'red',
             }
             markers = {
-                'historical data': 'o',
-                'Total-linear extrapolation': 'o',
+                'historical aggregate training compute': 'o',
+                'historical aggregate total compute': 'v',
                 'Total-method 2027': 's',
                 'aggregate training compute': '.',
-                'aggregate inference compute': 'x'
+                'aggregate inference compute': 'x',
             }
-            for method, predictions in LOG_AGGREGATE_COMPUTE_DATA.items():
-                years = [y for y in predictions.keys()]
-                values = [predictions[y] for y in years]
-                plt.scatter(years, values, label=f'{method} (Projected)' if method!='historical data' else f'{method}',
-                        color=colors[method], marker=markers[method])
-            
+
+            for method in colors.keys():
+                all_sim_values = defaultdict(list)
+                
+                for sim in range(n_simulations):
+                    predictions = LOG_AGGREGATE_COMPUTE_DATA[sim].get(method, {})
+                    for year, value in predictions.items():
+                        all_sim_values[year].append(value)
+                
+                years = sorted(all_sim_values.keys())
+                medians = [np.median(all_sim_values[year]) for year in years]
+                lower_bounds = [np.percentile(all_sim_values[year], 5) for year in years]
+                upper_bounds = [np.percentile(all_sim_values[year], 95) for year in years]
+
+                plt.plot(years, medians, label=f'{method} (Median)', color=colors[method], marker=markers[method])
+                if "historical" not in method:
+                    plt.fill_between(years, lower_bounds, upper_bounds, color=colors[method], alpha=0.2, label=f'{method} (90% CI)')
+
             plt.xlabel('Year')
             plt.ylabel('Log10(Compute) [FLOP]')
             plt.title(f'Compute Usage Over Time')
@@ -364,257 +360,275 @@ def main(g=2.25,ratio=0.3,fm=1.0):
             plt.grid(True)
             plt.xticks(np.arange(min(log_aggregate_compute.index), 2030, 2))
 
-
             # Plot compute allocations for different tau values
-            plt.figure(figsize=(10,6))
+            plt.figure(figsize=(10, 6))
 
-            years = sorted(tau_dict.keys())
-            tau_values = [tau_dict[y] for y in years]
+            years = sorted(pred_alloc_dict.keys())
+            alloc_ratios = [pred_alloc_dict[y] for y in years]
 
             train_allocs = []
             inference_allocs = []
             if FIXED_ALLOCATION:
-                train_allocs,inference_allocs = alloc_ratio_to_alloc(alloc_ratio=fixed_alloc*np.ones(len(pred_years)))
+                train_allocs, inference_allocs = alloc_ratio_to_alloc(np.ones(years.__len__()) * fixed_alloc)
             if DYNAMIC_ALLOCATION:
-                train_allocs, inference_allocs = alloc_ratio_to_alloc(alloc_ratio=np.array(list(pred_alloc_dict.values())))
-
+                train_allocs, inference_allocs = alloc_ratio_to_alloc(np.array(list(pred_alloc_dict.values())))
 
             plt.plot(years, train_allocs, 'g-', label='Training Allocation')
             plt.plot(years, inference_allocs, 'r-', label='Inference Allocation')
             plt.scatter(years, train_allocs, color='green', marker='o')
             plt.scatter(years, inference_allocs, color='red', marker='o')
-            plt.ylim(0,1)
+            plt.ylim(0, 1)
 
             plt.xlabel('Year')
-            plt.ylabel('Allocation Fraction') 
+            plt.ylabel('Allocation Fraction')
             plt.title('Compute Allocations Over Time')
             plt.legend()
             plt.grid(True)
             plt.xticks(years)
-            
-    if 1: #Generate compute samples
 
-        #get compute_alloc parameters
-        fit_years=np.arange(2020,df.year.max()+1)
+
+
+    if 1: #fit allocations 
         FIT_DATA={year:None for year in fit_years}
 
-        logging.info('Fitting f_M coefficients')
-        
+
+        print('Fitting f_M coefficients')
+
         for idx,year in enumerate(fit_years):
-            total_compute=aggregate_training_compute[year]
+            total_compute=aggregate_compute[aggregate_compute.index==year].values
             datapoints_year=df[df['date'].dt.year==year]['compute']
             mean_log_compute=np.log10(datapoints_year).mean()
-            norm_factor_model=datapoints_year.max()
-            norm_factor_total=total_compute
+            largest_model=datapoints_year.max()
+            smallest_model=datapoints_year.min()
+            norm_factor_total=total_compute[0]
 
             sorted_computes=np.sort(datapoints_year)
-            norm_sorted_computes=sorted_computes/norm_factor_model
+            norm_sorted_computes=sorted_computes/largest_model
+            
             cumsum=np.cumsum(sorted_computes)
-            norm_cumsum=cumsum/norm_factor_total
+            norm_cum_alloc=cumsum/norm_factor_total
+            _norm_catg_alloc_ = np.diff(norm_cum_alloc)
+            norm_catg_alloc = np.concatenate((np.array([1-np.sum(_norm_catg_alloc_)]) , _norm_catg_alloc_))
 
             #store data 
             FIT_DATA[year]={
             'compute':sorted_computes,
             'cumulative_sum':cumsum,
             'norm_factor_total':norm_factor_total,
-            'norm_factor_model':norm_factor_model,
-            'f_m_coeffs':None,
+            'largest_model':largest_model,
+            'norm_smallest_model':smallest_model/largest_model,
+            'norm_cum_alloc fits':None,
+            'norm_catg_alloc fits':None,
                     }
             
             #fit data
             X = np.log10(norm_sorted_computes).reshape(-1, 1)
-            y = np.log10(norm_cumsum)
+            y = np.log10(norm_cum_alloc)
             X_trans,y_trans=X-constraint_point[0],y-constraint_point[1]
-            reg = linear_model.LinearRegression(fit_intercept=False).fit(X_trans, y_trans) #forcing X-a,y-b to go through (0,0) means X,y goes through (a,b)
-            FIT_DATA[year]['fit data'] = (X.ravel(),y.ravel())
-            FIT_DATA[year]['f_m_coeffs'] = [reg.coef_[0], reg.intercept_]
+            reg_cum_alloc = linear_model.LinearRegression(fit_intercept=False).fit(X_trans, y_trans) #forcing X-a,y-b to go through (0,0) means X,y goes through (a,b)
+            FIT_DATA[year]['cum_alloc_fits'] = [reg_cum_alloc.coef_[0], reg_cum_alloc.intercept_]
 
 
-        assert(MEAN_FM+SET_FM)==1, "Only one of MEAN_FM, or SET_FM can be True"
+            X,y = np.log10(norm_sorted_computes).reshape(-1,1),np.log10(norm_catg_alloc).reshape(-1,1)
+            reg_catg_alloc = linear_model.LinearRegression(fit_intercept=True).fit(X,y) #we claim that there is a linear relationship between log(norm_computes) and log(catg_alloc)
+            FIT_DATA[year]['catg_alloc_fits'] = [reg_catg_alloc.coef_[0][0], reg_catg_alloc.intercept_[0]]
+            FIT_DATA[year]['norm_catg_alloc']=norm_catg_alloc
 
-        #do random_sampling
-        all_years=np.concatenate([fit_years, pred_years.astype(int).ravel()])
-
-        COMPUTE_SAMPLE_DATA={int(year):{} for year in all_years} #all years because we're also retrodicting
-
-        for year in all_years:
-
-            if year in fit_years:
-                log_agg_training_compute=LOG_AGGREGATE_COMPUTE_DATA["historical aggregate training compute"][year]
-            if year in pred_years:
-                log_agg_training_compute=LOG_AGGREGATE_COMPUTE_DATA["aggregate training compute"][year]
-            agg_training_compute=10**log_agg_training_compute #total compute used over the year
-
-            #model sizes (as fraction of largest_model)
-            norm_ms = np.logspace(np.log10(min_norm_m),np.log10(1.0),num=n_catgs) #model sizes as fraction of largest model
-            log_norm_ms = np.log10(norm_ms)
-
-            if MEAN_FM:
-                fm_grad,fm_int=np.mean([FIT_DATA[year]['f_m_coeffs'][0] for year in FIT_DATA]),np.mean([FIT_DATA[year]['f_m_coeffs'][1] for year in FIT_DATA])
-            elif SET_FM:
-                fm_grad,fm_int=fm_fixed,0.0
-
-            log_frac_cum_compute = fm_grad*log_norm_ms + fm_int
-            frac_cum_compute=10**log_frac_cum_compute
-
-            model_ctgs = [f'{norm_ms[i]:.2e}--{norm_ms[i+1]:.2e}' for i in range(len(norm_ms)-1)]
-            f_m = np.diff(frac_cum_compute) #we don't include compute alloc to models 1e-8 smaller than total compute
-            logging.debug(f'Sum f_m: {np.sum(f_m)}')
-            bin_compute_allocs=f_m*agg_training_compute #array of how much compute allocated to each bin
-            DATA_alloc={model_ctgs[i]:
-                        {'compute alloc':bin_compute_allocs[i]} for i in range(len(model_ctgs))}
+        if FIT_ALLOCATION_PLOTS:
+            fig, ax = plt.subplots(figsize=(10, 6))
+            for year in fit_years:
+                if year in FIT_DATA:
+                    data = FIT_DATA[year]
+                    norm_sorted_computes = data['compute'] / data['largest_model']
+                    norm_catg_alloc = data['norm_catg_alloc']
+                    m, b = data['catg_alloc_fits']
+                    
+                    ax.scatter(norm_sorted_computes, norm_catg_alloc, marker='o', s=50, label=f'Year {year} Data points')
+                    log_catg_alloc = m * np.log10(norm_sorted_computes) + b #the relationship in log space
+                    y_fit = 10**(log_catg_alloc)
+                    ax.plot(norm_sorted_computes, y_fit, label=f'Year {year} Fit (m={m:.2f}, b={b:.2f})')
             
-            compute_samples_rand=[]
-        
-            #iterate over different bins sizes
-            for idx,(ctg,alloc) in enumerate(list(zip(model_ctgs,bin_compute_allocs))):
-                #here alloc is the amount of alloc given to each individual bin
-                bounds = ctg.split('--')
-                largest_model=largest_model_total_compute_ratio*agg_training_compute
-                norm_model_bin_lb,norm_model_bin_ub = float(bounds[0]),float(bounds[1])
-                model_bin_lb,model_bin_ub = largest_model*norm_model_bin_lb, largest_model*norm_model_bin_ub #normalising factor is total training compute
-                assert(alloc>model_bin_ub)
+            ax.set_xlabel('Normalized Sorted Computes')
+            ax.set_ylabel('Normalized Category Allocations')
+            ax.set_title('Category Allocations and Fits')
+            ax.set_xscale('log')
+            ax.set_yscale('log')
+            ax.legend()
+            ax.grid(True)
+            plt.show()
+            
 
-                #not generating multiple samples yet for CIs
-                allocnorm_model_bin_lb,allocnorm_model_bin_ub=model_bin_lb/alloc, model_bin_ub/alloc #this is purely just for samplign; no physical meaning
-                running_tot=0
-                allocnormed_samples=[] 
-                while running_tot<1:
-                    #SAMPLE
-                    if bin_sampling_method=='random':
+        # Log debug - Print cum_alloc_fits for all years
+        logging.info("cum_alloc_fits for each year:")
+        for year in fit_years:
+            cum_alloc_coeffs = FIT_DATA[year]['cum_alloc_fits']
+            catg_alloc_coeffs = FIT_DATA[year]['catg_alloc_fits']
+            logging.info(f"Year {year}: cum_alloc_fits - slope={cum_alloc_coeffs[0]:.4f}, intercept={cum_alloc_coeffs[1]:.4f}")
+            logging.info(f"Year {year}: catg_alloc_fits - slope={catg_alloc_coeffs[0]:.4f}, intercept={catg_alloc_coeffs[1]:.4f}")
+
+            
+    if 1: #Generate compute samples
+
+
+        all_years=np.concatenate([fit_years, pred_years.astype(int).ravel()])
+        COMPUTE_SAMPLE_DATA = {sim: {int(year): {} for year in all_years} for sim in range(n_simulations)} #init data structure 
+
+        for sim in range(n_simulations):
+
+            #build in sampling
+            if FRONTIER_MODEL_GROWTH=='coupled':
+                norm_largest_model = truncated_normal(mean=largest_model_share_mean,std_dev=lms_stddev,min=min_lms,max=max_lms, size=1)[0]
+
+
+            for year in all_years:
+
+                #get total compute
+                if year in fit_years:
+                    log_agg_training_compute = LOG_AGGREGATE_COMPUTE_DATA[sim]["historical aggregate training compute"][year]
+                if year in pred_years:
+                    log_agg_training_compute = LOG_AGGREGATE_COMPUTE_DATA[sim]["aggregate training compute"][year]
+                agg_training_compute = 10**log_agg_training_compute  # total compute used over the year
+
+                #set largest model that year 
+                if FRONTIER_MODEL_GROWTH=='coupled':
+                    if year in fit_years: #remove this eventually
+                        largest_model = FIT_DATA[year]['largest_model']
+                        largest_model = norm_largest_model * agg_training_compute
+
+                    else:
+                        largest_model = norm_largest_model * agg_training_compute
+
+
+
+                logging.info(f"Ratio of largest model to aggregate training compute for year {year}: {largest_model / agg_training_compute}")
+
+                # model sizes (as fraction of largest_model)
+                norm_ms = np.logspace(np.log10(min_norm_m), np.log10(1.0), num=n_catgs)
+                log_norm_ms = np.log10(norm_ms)
+
+                if CONST_FM:
+                    fm_grad, fm_int = np.mean([FIT_DATA[year]['cum_alloc_fits'][0] for year in FIT_DATA]), np.mean([FIT_DATA[year]['cum_alloc_fits'][1] for year in FIT_DATA])
+                elif LIN_EXTRAP_FM:
+                    raise NotImplementedError("Linear extrapolation of fm_grad and fm_int not implemented")
+                elif CUSTOM_FM:
+                    fm_grad = custom_fm_grad
+                if year in FIT_DATA.keys():
+                    fm_grad, fm_int = FIT_DATA[year]['cum_alloc_fits']
+
+                log_frac_cum_compute = fm_grad * log_norm_ms + fm_int
+                frac_cum_compute = 10**log_frac_cum_compute
+                assert np.round(np.sum(np.diff(frac_cum_compute)), 5) == 1.0  # allocations should sum to 1
+
+                if year == 2024:
+                    for idx, frac_alloc in enumerate(np.diff(frac_cum_compute)):
+                        logging.debug(f"models {norm_ms[idx]} - {norm_ms[idx+1]} alloc: {frac_alloc}")
+
+                model_ctgs = [f'{norm_ms[i]:.2e}--{norm_ms[i+1]:.2e}' for i in range(len(norm_ms) - 1)]
+                f_m = np.diff(frac_cum_compute)  # we don't include compute alloc to models 1e-8 smaller than total compute
+                bin_compute_allocs = f_m * agg_training_compute  # array of how much compute allocated to each bin
+                DATA_alloc = {model_ctgs[i]: {'compute alloc': bin_compute_allocs[i]} for i in range(len(model_ctgs))}
+
+                compute_samples_rand = []
+
+                for idx, (ctg, alloc) in enumerate(list(zip(model_ctgs, bin_compute_allocs))):
+                    # here alloc is the amount of alloc given to each individual bin
+                    bounds = ctg.split('--')
+                    norm_model_bin_lb, norm_model_bin_ub = float(bounds[0]), float(bounds[1])
+                    model_bin_lb, model_bin_ub = largest_model * norm_model_bin_lb, largest_model * norm_model_bin_ub  # normalising factor is total training compute
+
+                    if alloc > model_bin_ub:
+                        pass  # do nothing; we're good
+                    else:
+                        capped_model_bin_ub = alloc  # cap the ub at the alloc
+                        model_bin_ub = capped_model_bin_ub
+                        logging.info(f"alloc: {alloc} < model_bin_ub: {model_bin_ub}. Capping model_bin_ub at alloc.")
+
+                    # not generating multiple samples yet for CIs
+                    allocnorm_model_bin_lb, allocnorm_model_bin_ub = model_bin_lb / alloc, model_bin_ub / alloc  # this is purely just for sampling; no physical meaning
+                    running_tot = 0
+                    allocnormed_samples = []
+                    while running_tot < 1:
+                        # SAMPLE
                         sample = np.random.uniform(allocnorm_model_bin_lb, allocnorm_model_bin_ub)
                         sample = float(sample) if isinstance(sample, np.ndarray) else sample
 
-                    #SUM CHECK
-                    if running_tot + sample > 1:
-                        allocnormed_samples.append(1 - running_tot)
-                        running_tot = 1
-                    else:
-                        allocnormed_samples.append(sample)
-                        running_tot += sample
+                        # SUM CHECK
+                        if running_tot + sample > 1:
+                            allocnormed_samples.append(1 - running_tot)
+                            running_tot = 1
+                        else:
+                            allocnormed_samples.append(sample)
+                            running_tot += sample
 
-                compute_samples_rand = compute_samples_rand + (list(alloc*np.array(allocnormed_samples)))
+                    compute_samples_rand = compute_samples_rand + (list(alloc * np.array(allocnormed_samples)))
 
-            compute_samples_rand = [x for x in compute_samples_rand if x!=0] #remove 0s
+                compute_samples_rand = [x for x in compute_samples_rand if x != 0]
 
-            COMPUTE_SAMPLE_DATA[year]['samples']=compute_samples_rand
-            COMPUTE_SAMPLE_DATA[year]['date']=[decimal_year_to_date(year+np.random.random()) for _ in compute_samples_rand] #conver to stand pd datetime format
-            COMPUTE_SAMPLE_DATA[year]['largest model']=largest_model
+                COMPUTE_SAMPLE_DATA[sim][year]['samples'] = compute_samples_rand
+                COMPUTE_SAMPLE_DATA[sim][year]['date'] = [decimal_year_to_date(year + np.random.random()) for _ in compute_samples_rand]  # convert to standard pd datetime format
+                COMPUTE_SAMPLE_DATA[sim][year]['largest model'] = largest_model
 
 
-        logging.debug("Number of samples per year:")
+        logging.debug("\nNumber of samples per year:")
         for year in pred_years.ravel():
-            logging.debug(f"{year}: {len(COMPUTE_SAMPLE_DATA[year]['samples'])} samples")
+            logging.debug(f"{year}: {len(COMPUTE_SAMPLE_DATA[0][year]['samples'])} samples") #take first sim
 
                 
 
-        if PLOT_SAMPLE_KDES: 
+        if GENERATED_SAMPLE_PLOTS:
             fig, axes = plt.subplots(3, 2, figsize=(12, 8))
             axes = axes.ravel()
 
-            for idx, (year, value) in enumerate((y, s) for y, s in COMPUTE_SAMPLE_DATA.items() if y in pred_years):
-                sns.kdeplot(data=np.log10(value['samples']), ax=axes[idx])
+            for idx, year in enumerate(pred_years):
+                all_samples = [np.log10(COMPUTE_SAMPLE_DATA[sim][year]['samples']) for sim in range(n_simulations)]
+                
+                # Define a common set of x-points for KDE evaluation
+                x_points = np.linspace(15, 30, 1000)
+                
+                # Evaluate KDE for each simulation
+                from scipy.stats import gaussian_kde
+                kde_values = [gaussian_kde(samples)(x_points) for samples in all_samples]
+                
+                # Calculate median and 90th percentile KDE values at each x-point
+                median_kde = np.median(kde_values, axis=0)
+                lower_bound_kde = np.percentile(kde_values, 5, axis=0)
+                upper_bound_kde = np.percentile(kde_values, 95, axis=0)
+                
+                # Plot the median KDE
+                axes[idx].plot(x_points, median_kde, label='Median KDE')
+                
+                # Fill between the 5th and 95th percentile KDE values
+                axes[idx].fill_between(x_points, lower_bound_kde, upper_bound_kde, alpha=0.3, label='90% CI')
+                
                 axes[idx].set_title(f'Year {year}')
                 axes[idx].set_xlabel('log compute (FLOPs)')
                 axes[idx].set_ylabel('Density')
                 axes[idx].grid(alpha=0.5)
-                axes[idx].set_xlim([15,30])
+                axes[idx].set_xlim([15, 30])
+                axes[idx].legend()
 
             plt.tight_layout()
             plt.show()
 
-        if PLOT_SAMPLE_SCATTERS:
-            
-            # Create scatter plot
-            plt.figure(figsize=(12,6))
+        if GENERATED_SAMPLE_PLOTS:
+            ylims = (14, 30)
+            plt.figure(figsize=(12, 6))
             plt.scatter(df[df['year'].isin(fit_years)]['date'], np.log10(df[df['year'].isin(fit_years)]['compute']), alpha=0.5, label='Historical')
+            
             for year in pred_years:
-                plt.scatter(COMPUTE_SAMPLE_DATA[year]['date'], np.log10(COMPUTE_SAMPLE_DATA[year]['samples']), alpha=0.5, label='Projected' if year==pred_years[0] else "", color='red')
+                sample_data = COMPUTE_SAMPLE_DATA[0][year]
+                plt.scatter(sample_data['date'], np.log10(sample_data['samples']), alpha=0.5, label='Projected Samples' if year == pred_years[0] else "", color='red')
+
             plt.xlabel('Year')
             plt.ylabel('Log Compute (FLOPs)')
             plt.grid(alpha=0.3)
             plt.legend()
+            plt.ylim(ylims)
+            plt.yticks(np.arange(ylims[0], ylims[1], 0.5))
             plt.show()
 
-    if 1: # threshold counting
 
-        ## regular counts 
-
-        threshold_counts = {year: [] for year in pred_years.astype(int).ravel()}
-
-        for year, samples in COMPUTE_SAMPLE_DATA.items():
-            if year in pred_years:
-                for threshold in thresholds:
-                    count = sum(x >= 10**threshold for x in samples['samples'])
-                    threshold_counts[year].append(count)
-
-        df_counts = pd.DataFrame(threshold_counts,
-                                index=[f'>1e{t}' for t in thresholds])
-
-
-        # Make cumulative across years
-        df_counts_cumulative = df_counts.copy()
-        for idx in df_counts.index:
-            df_counts_cumulative.loc[idx] = df_counts.loc[idx].cumsum()
-
-        #display(df_counts_cumulative)
-        absolute_threshold_predicted=df_counts_cumulative
-
-
-        
-
-        #frontier counts
-
-        bins = pd.date_range(start=f"{pred_years.ravel().min()}-01-01", end=f"{pred_years.ravel().max()+1}-01-01", freq=period_freq).astype(f'period[{period_freq}]')
-        period_data=pd.Series(bins[bins.searchsorted(df.date.dt.to_period(period_freq)) - 1], index=df.index)
-
-        # Initialize results dictionary
-        frontier_counts = {width: {period: 0 for period in bins} for width in threshold_widths}
-
-        # For each period
-        for period in bins:
-            period_samples = []
-            
-            # Collect all samples from that period
-            for year in COMPUTE_SAMPLE_DATA:
-                #print(COMPUTE_SAMPLE_DATA[year]['date'])
-                pd_dt_dates = pd.to_datetime(COMPUTE_SAMPLE_DATA[year]['date'])
-                if period.year == year:
-                    # Filter samples that fall within the period
-                    period_start = period.start_time
-                    period_end = period.end_time
-                    period_mask = (pd_dt_dates >= period_start) & (pd_dt_dates < period_end)
-                    period_samples.extend(np.array(COMPUTE_SAMPLE_DATA[year]['samples'])[period_mask])
-                    
-            if period_samples:
-                # Find largest model in period
-                frontier = max(period_samples)
-                
-                # Count models within each threshold width
-                for width in threshold_widths:
-                    threshold = 10**width
-                    count = sum(abs(np.log10(model) - np.log10(frontier)) <= width for model in period_samples)
-                    logging.debug(f"Period: {period}, Frontier size: {frontier}, Threshold width: {width}, Count: {count}")
-                    frontier_counts[width][period] = count
-
-        # Convert to DataFrame
-        df_frontier = pd.DataFrame(frontier_counts)
-        df_frontier.columns = [f'Within {w} OOM' for w in threshold_widths]
-
-        # Sum up counts for each year
-        yearly_counts = {}
-        for width in threshold_widths:
-            col = f'Within {width} OOM'
-            yearly_counts[col] = df_frontier.groupby(df_frontier.index.year)[col].sum()
-
-        df_frontier_yearly = pd.DataFrame(yearly_counts)
-        df_frontier_yearly = df_frontier_yearly.transpose()
-
-        frontier_threshold_predicted=df_frontier_yearly
-        #display(df_frontier_yearly)
-
-    if 1: #backtesting 
-        #backtesting the absolute thresholds
+    if 1: # verification retrodiction
 
         retrodict_years=fit_years
 
@@ -624,22 +638,29 @@ def main(g=2.25,ratio=0.3,fm=1.0):
                                                         for year in retrodict_years}
                                             for threshold in retrodict_thresholds}, 
                                             orient='index')
-        df_observed.index = [f'>1e{t}' for t in retrodict_thresholds]
-        #df_observed.index.name = 'Threshold'
+        df_observed.index = [f'{10**threshold:.2e}' for threshold in retrodict_thresholds]
+        df_observed.index.name = 'Threshold'
 
         # Create retrodict counts dictionary
-        retrodict_counts = {year: [] for year in retrodict_years}
+        retrodict_counts = {year: {threshold: [] for threshold in retrodict_thresholds} for year in retrodict_years}
 
-        for year, data in COMPUTE_SAMPLE_DATA.items():
-            samples = data['samples']
-            if year in retrodict_years:
-                for threshold in retrodict_thresholds:
-                    count = sum(x >= 10**threshold for x in samples)
-                    retrodict_counts[year].append(count)
+        for sim, sim_data in COMPUTE_SAMPLE_DATA.items():
+            for year, year_data in sim_data.items():
+                if year in retrodict_years:
+                    for threshold in retrodict_thresholds:
+                        count = (sum(x >= 10**threshold for x in year_data['samples'])).astype(int)
+                        retrodict_counts[year][threshold].append(count)
 
-        df_retrodict = pd.DataFrame(retrodict_counts,
-                                index=[f'{t:.2e}' for t in retrodict_thresholds])
-        #df_retrodict.index.name = 'Threshold'
+        # Calculate median for each year and threshold
+        retrodict_median_counts = {year: [] for year in retrodict_years}
+        for year in retrodict_years:
+            for threshold in retrodict_thresholds:
+                median_count = (np.median(retrodict_counts[year][threshold])).astype(int)
+                retrodict_median_counts[year].append(median_count)
+
+        df_retrodict = pd.DataFrame(retrodict_median_counts,
+                                index=[f'{10**t:.2e}' for t in retrodict_thresholds])
+        df_retrodict.index.name = 'Threshold'
 
         # Take cumulative sum across years for both dataframes
         df_observed_cumulative = df_observed.cumsum(axis=1)
@@ -653,103 +674,193 @@ def main(g=2.25,ratio=0.3,fm=1.0):
         for year in df_observed_cumulative.columns:
             combined_df[year] = list(zip(df_observed_cumulative[year], df_retrodict_cumulative[year]))
 
-        absolute_threshold_retrodicted=combined_df
-        #display(combined_df)
 
-        ## frontier counts
+        # Calculate the difference between observed and retrodicted values
+        difference_df = df_observed_cumulative - df_retrodict_cumulative
 
-        # Group data into 6-month periods
-        bins = pd.date_range(start=df.date.min(), end=df.date.max(), freq=period_freq).astype(f'period[{period_freq}]')
-        df['period'] = pd.Series(bins[bins.searchsorted(df.date.dt.to_period(period_freq)) - 1], index=df.index)
+        absolute_threshold_retrodicted = combined_df
+        absolute_threshold_retrodicted_difference = difference_df
+
+
+
+        #retrodiction for frontier counts
+        # Group data into specified periods
+        df['period'] = round_dates(df['date'], period_freq)
         df['log_compute'] = np.log10(df['compute'])
 
-        frontier_counts = []
+        frontier_counts = {}
 
-        for period in df['period'].unique():
-            period_data = df[df['period'] == period]
-            if len(period_data) > 0:
-                largest_model = period_data['compute'].max()
+        for year in fit_years:
+            year_filtered_df = df[df['date'].dt.year == year]
+            frontier_counts[year] = {}
+            for width in threshold_widths:
+                width_year_counts = 0
+                for idx, period in enumerate(sorted(year_filtered_df['period'].unique())):
+                    largest_model = df[df['period'] < period]['compute'].max()  # get largest model before this period
+                    period_data = df[df.period == period]
+                    within_threshold_condition = ((np.log10(largest_model) - np.log10(period_data['compute'])) <= width) & ((np.log10(largest_model) - np.log10(period_data['compute'])) > 0)
+                    above_frontier_condition = period_data['compute'] > largest_model
+                    count = within_threshold_condition.sum() + above_frontier_condition.sum()
+                    width_year_counts += count
+                frontier_counts[year][width] = width_year_counts
+
+        # Calculate median projection for retrodicted counts
+        sample_frontier_counts = {year: {width: [] for width in threshold_widths} for year in fit_years}
+
+        for sim, sim_data in COMPUTE_SAMPLE_DATA.items():
+            for year in fit_years:
+                year_data = sim_data[year]
+                year_data['period'] = round_dates(pd.to_datetime(year_data['date']), period_freq)
+                year_data['log_compute'] = np.log10(year_data['samples'])
                 
                 for width in threshold_widths:
-                    count = (np.abs(np.log10(largest_model)-period_data['log_compute']) <= width).sum()
-                    
-                    frontier_counts.append({
-                        'period': period.to_timestamp(),
-                        'threshold_width': width,
-                        'count': count,
-                        'largest_model': largest_model
-                    })
+                    width_year_counts = 0
+                    for period in sorted(year_data['period'].unique()):
+                        largest_model = max(np.concatenate([np.array(data['samples'])[np.array(data['date']) < period] for data in sim_data.values()]))
+                        period_sample_data = np.array(year_data['samples'])[year_data['period'] == period]
+                        within_threshold_condition = (np.log10(largest_model) - np.log10(period_sample_data) <= width) & (np.log10(largest_model) - np.log10(period_sample_data) > 0)
+                        above_frontier_condition = period_sample_data > largest_model
+                        width_year_counts += within_threshold_condition.sum() + above_frontier_condition.sum()
+                    sample_frontier_counts[year][width].append(width_year_counts)
 
-        frontier_df = pd.DataFrame(frontier_counts)
+        # Calculate median for each year and width
+        median_sample_frontier_counts = {year: {width: (np.median(sample_frontier_counts[year][width])).astype(int) for width in threshold_widths} for year in fit_years}
 
-        # Filter for 2020-2023 and pivot to create summary dataframe
-        summary_df = frontier_df[
-            (frontier_df['period'].dt.year >= 2020) & 
-            (frontier_df['period'].dt.year <= 2023)
-        ].pivot(
-            index='period',
-            columns='threshold_width',
-            values='count'
-        ) #basically a reshaping operation
-        summary_df.columns = [f'width: {w}' for w in threshold_widths]
+        combined_counts = {}
+
+        for width in threshold_widths:
+            combined_counts[width] = {}
+            for year in fit_years:
+                a = frontier_counts[year][width]
+                b = median_sample_frontier_counts[year][width]
+                combined_counts[width][year] = (a, b)
+
+        combined_df = pd.DataFrame(combined_counts).T
+        combined_df.index.name = 'width'
+        combined_df.columns.name = 'year'
 
 
-        # Create similar table for COMPUTE_SAMPLE_DATA
-        sample_frontier_counts = {width: {} for width in threshold_widths}
+        difference_counts = {}
 
-        # For each period
-        for period in pd.date_range(start='2020', end='2024', freq=period_freq).astype(f'period[{period_freq}]'):
-            period_samples = []
-            
-            # Collect all samples from that period
-            for year in COMPUTE_SAMPLE_DATA:
-                pd_dt_dates = pd.to_datetime((COMPUTE_SAMPLE_DATA[year]['date']))
-                if period.year == year:
-                    period_start = period.start_time
-                    period_end = period.end_time
-                    period_mask = (pd_dt_dates >= period_start) & (pd_dt_dates < period_end)
-                    period_samples.extend(np.array(COMPUTE_SAMPLE_DATA[year]['samples'])[period_mask])
-                    
-            if period_samples:
-                # Find largest model in period
-                frontier = max(period_samples)
+        for width in threshold_widths:
+            difference_counts[width] = {}
+            for year in fit_years:
+                observed = frontier_counts[year][width]
+                predicted = median_sample_frontier_counts[year][width]
+                difference_counts[width][year] = observed - predicted
+
+        difference_df = pd.DataFrame(difference_counts).T
+        difference_df.index.name = 'width'
+        difference_df.columns.name = 'year'
+
+        frontier_threshold_retrodicted = combined_df
+        frontier_threshold_retrodicted_difference = difference_df
+
+
+
+    if 1: # predictions
+
+        #predictions for absolute thresholds
+        threshold_counts_all_simulations = {year: {threshold: [] for threshold in thresholds} for year in pred_years.astype(int).ravel()}
+
+        # Iterate over each simulation
+        for sim in range(len(COMPUTE_SAMPLE_DATA)):
+            for year, samples in COMPUTE_SAMPLE_DATA[sim].items():
+                if year in pred_years:
+                    for threshold in thresholds:
+                        count = sum(x >= 10**threshold for x in samples['samples'])
+                        threshold_counts_all_simulations[year][threshold].append(count)
+
+        # Calculate median and 90% CI for each year and threshold
+        threshold_counts_summary = {year: [] for year in pred_years.astype(int).ravel()}
+        for year in pred_years.astype(int).ravel():
+            for threshold in thresholds:
+                counts = threshold_counts_all_simulations[year][threshold]
+                median_count = np.median(counts)
+                lower_bound = np.percentile(counts, 5)
+                upper_bound = np.percentile(counts, 95)
+                threshold_counts_summary[year].append(f"{median_count:.0f} ({lower_bound:.0f}-{upper_bound:.0f})")
+
+        df_median_counts = pd.DataFrame({year: [int(round(np.median(threshold_counts_all_simulations[year][threshold]))) for threshold in thresholds] for year in pred_years.astype(int).ravel()}, index=[f'>1e{t}' for t in thresholds])
+        df_5th_percentile_counts = pd.DataFrame({year: [int(round(np.percentile(threshold_counts_all_simulations[year][threshold], 5))) for threshold in thresholds] for year in pred_years.astype(int).ravel()}, index=[f'>1e{t}' for t in thresholds])
+        df_95th_percentile_counts = pd.DataFrame({year: [int(round(np.percentile(threshold_counts_all_simulations[year][threshold], 95))) for threshold in thresholds] for year in pred_years.astype(int).ravel()}, index=[f'>1e{t}' for t in thresholds])
+
+        # Make cumulative across years
+        df_median_cumulative = df_median_counts.cumsum(axis=1)
+        df_5th_percentile_cumulative = df_5th_percentile_counts.cumsum(axis=1)
+        df_95th_percentile_cumulative = df_95th_percentile_counts.cumsum(axis=1)
+
+        # Combine into a single DataFrame
+        df_combined_cumulative = df_median_cumulative.astype(str) + " (" + df_5th_percentile_cumulative.astype(str) + "-" + df_95th_percentile_cumulative.astype(str) + ")"
+
+        if 0: 
+            for sim in range(len(COMPUTE_SAMPLE_DATA)):
+                for year, samples in COMPUTE_SAMPLE_DATA[sim].items():
+                    if year in pred_years:
+                        print(f"Year {year}: {len(samples['samples'])} samples")
+
+
+        absolute_threshold_predicted = df_combined_cumulative
+
+
+        #predictions for frontier counts
+        # Generate period data for years 2024-2029 (2029 not inclusive)
+        period_data = pd.date_range(start='2024-01-01', end='2029-01-01', freq='6M').strftime('%Y-%m-%d %H:%M:%S').tolist()
+        
+        frontier_counts_all_simulations = {year: {width: [] for width in threshold_widths} for year in pred_years}
+
+        for sim in range(len(COMPUTE_SAMPLE_DATA)):
+            for year in pred_years:
+                year_data = COMPUTE_SAMPLE_DATA[sim][year]
+                year_data['period'] = round_dates(pd.to_datetime(year_data['date']), period_freq)
+                year_data['log_compute'] = np.log10(year_data['samples'])
                 
-                # Count models within each threshold width
                 for width in threshold_widths:
-                    count = sum(abs(np.log10(model) - np.log10(frontier)) <= width for model in period_samples)
-                    sample_frontier_counts[width][period] = count
+                    width_year_counts = 0
+                    for period in sorted(year_data['period'].unique()):
+                        largest_model = max(np.concatenate([np.array(data['samples'])[np.array(data['date']) < period] for data in COMPUTE_SAMPLE_DATA[sim].values()])) #get largest model until this period
+                        period_sample_data = np.array(year_data['samples'])[year_data['period'] == period] #get models released in this period
+                        within_threshold_condition = (np.log10(largest_model) - np.log10(period_sample_data) <= width) & (np.log10(largest_model) - np.log10(period_sample_data) > 0) #0 condition makes sure we don't catch models larger than frontier
+                        above_frontier_condition  = period_sample_data > largest_model
+                        count = within_threshold_condition.sum() + above_frontier_condition.sum() #how many models released this period within thresholds of largest model seen so far.
+                        width_year_counts += count
+                    frontier_counts_all_simulations[year][width].append(width_year_counts)
+        
+        # Calculate median and 90% CI for each year and width
+        frontier_counts_summary = {year: [] for year in pred_years}
+        for year in pred_years:
+            for width in threshold_widths:
+                counts = frontier_counts_all_simulations[year][width]
+                median_count = np.median(counts)
+                lower_bound = np.percentile(counts, 5)
+                upper_bound = np.percentile(counts, 95)
+                frontier_counts_summary[year].append(f"{median_count:.0f} ({lower_bound:.0f}-{upper_bound:.0f})")
 
-        sample_summary_df = pd.DataFrame(sample_frontier_counts)
-        sample_summary_df.columns = [f'width: {w}' for w in threshold_widths]
+        # Convert to DataFrame
+        df_frontier_counts = pd.DataFrame(frontier_counts_summary).T
+        df_frontier_counts.index.name = 'Year'
+        df_frontier_counts.columns = [f'Within {width} OOM' for width in threshold_widths]
+        df_frontier_counts = df_frontier_counts.transpose()
 
+        frontier_threshold_predicted = df_frontier_counts
 
-        # Group by year and sum
-        summary_df = summary_df.groupby(summary_df.index.year).sum()
-        sample_summary_df = sample_summary_df.groupby(sample_summary_df.index.year).sum()
-        # Combine observed and retrodicted counts
-        combined_df = pd.DataFrame()
-        for col in summary_df.columns:
-            combined_df[col] = list(zip(summary_df[col], sample_summary_df[col]))
-        combined_df.index = range(2020, 2024)
-
-        # Pivot the dataframe
-        combined_df = combined_df.T
-        frontier_threshold_retrodicted=combined_df
-
-        #display(combined_df)
 
     if 1: #display and save
 
         if not SAVE_RESULTS:
             logging.info("Displaying results...\n")
-            logging.info("Absolute Threshold Predicted:")
-            display(absolute_threshold_predicted)
-            logging.info("Frontier Threshold Predicted:")
-            display(frontier_threshold_predicted)
-            logging.info("Absolute Threshold Retrodicted:")
+            logging.info("=== Retrodicted Thresholds ===")
+            logging.info("=== Absolute Threshold Retrodicted ===")
             display(absolute_threshold_retrodicted)
-            logging.info("Frontier Threshold Retrodicted:")
+            display(absolute_threshold_retrodicted_difference)
+            logging.info("=== Frontier Threshold Retrodicted ===")
             display(frontier_threshold_retrodicted)
+            display(frontier_threshold_retrodicted_difference)
+            logging.info("=== Predicted Thresholds ===")
+            logging.info("=== Absolute Threshold Predicted ===")
+            display(absolute_threshold_predicted)
+            logging.info("=== Frontier Threshold Predicted ===")
+            display(frontier_threshold_predicted)
         
 
         if SAVE_RESULTS:
@@ -765,15 +876,17 @@ def main(g=2.25,ratio=0.3,fm=1.0):
                 for key, value in SAVE_CONFIG.items():
                     f.write(f"{key}: {value}\n")
                 f.write("\n")
-                f.write("Absolute Threshold Predicted:\n")
-                absolute_threshold_predicted.to_csv(f,sep='\t')
-                f.write('\n\n')
-                f.write("Frontier Threshold Predicted:\n")
-                frontier_threshold_predicted.to_csv(f,sep='\t')
-                f.write('\n\n')
                 f.write("Absolute Threshold Retrodicted:\n")
                 absolute_threshold_retrodicted.to_csv(f,sep='\t')
                 f.write('\n\n')
                 f.write("Frontier Threshold Retrodicted:\n")
                 frontier_threshold_retrodicted.to_csv(f,sep='\t')
+                f.write('\n\n')
+                f.write("Absolute Threshold Predicted:\n")
+                absolute_threshold_predicted.to_csv(f,sep='\t')
+                f.write('\n\n')
+                f.write("Frontier Threshold Predicted:\n")
+                frontier_threshold_predicted.to_csv(f,sep='\t')
 
+
+main()
