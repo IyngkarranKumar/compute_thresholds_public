@@ -35,6 +35,7 @@ def main():
         from sklearn import linear_model
         from collections import defaultdict
         import warnings
+        from IPython.display import display
         
         end_time = time.time()
         logging.info(f"Imports completed in {end_time - start_time:.2f} seconds")
@@ -100,12 +101,12 @@ def main():
         SAVE_RESULTS=False
 
         #sampling parameters
-        n_simulations = 10 #for bootstrappng, sampling parameters etc. n_simulations = 10 #for bootstrappng, sampling parameters etc. 
+        n_simulations = 100 #for bootstrappng, sampling parameters etc. n_simulations = 10 #for bootstrappng, sampling parameters etc. 
 
         #training compute extrapolation config 
         AI2027_EXTRAP=True
         method_choice="method 2027" #['linear extrapolation', 'method 2027']
-        hist_alloc=1/1
+        hist_alloc=40/60
         hist_alloc_multiplier=1+(1/hist_alloc)
         FIXED_ALLOCATION=True
         fixed_alloc=40/60
@@ -118,7 +119,7 @@ def main():
                 2027: 20/80,
                 2028: 20/80,
             }
-        g_global_AI_compute_mean=2.5
+        g_global_AI_compute_mean=3.5
         g_AI_workload_share_mean=1.5 #assuming AI_compute_usage/AI_compute_capacity = const - 3.0 gets the two superposed!
         g_total = g_global_AI_compute_mean + g_AI_workload_share_mean
         g_stdev=0.0 #get more reasonable values by fixing rather than computing from historical data
@@ -131,26 +132,27 @@ def main():
         filter_thresholds=1e-20 #ignore models smaller than this
 
         ##generate sample parameters
-        CONST_FM=False
+        CONST_FM=True
         LIN_EXTRAP_FM=False
-        CUSTOM_FM=True
+        CUSTOM_FM=False
         if CUSTOM_FM:
             custom_fm_grad=1.0 #it would be nicer to set c
         assert(CONST_FM+LIN_EXTRAP_FM+CUSTOM_FM)==1, "Only one of CONST_FM, LIN_EXTRAP_FM, or CUSTOM_FM can be True"
 
         #IMPORTANT PARAMETER - largest model share
-        FRONTIER_MODEL_GROWTH="coupled"
+        LMS_SAMPLING="uniform"
         min_norm_m = 10**-7
-        largest_model_share_mean,lms_stddev,min_lms,max_lms=0.3, 0.2/3,None,None
+        largest_model_share_mean,lms_stddev,min_lms,max_lms=0.3, 0.1,0.05,0.50 #I want 0.05 and 0.5 as min and max
 
         n_catgs = 50
 
 
         #threshold counting PARAMETERS
         thresholds=[25, 26, 27, 28, 29]
+        retrodict_thresholds=[23, 24, 25]
         threshold_widths = [0.5, 1, 1.5]  # List of threshold widths to analyze
         period_freq = '3M'  # frequency for doing frontier counts
-        retrodict_thresholds=[23, 24, 25]
+        CI_percentiles=[10,50,90]
 
 
         #SAVE CONFIG
@@ -476,8 +478,13 @@ def main():
         for sim in range(n_simulations):
 
             #build in sampling
-            if FRONTIER_MODEL_GROWTH=='coupled':
+            assert LMS_SAMPLING in ["uniform", "normal"]
+            if LMS_SAMPLING=="uniform":
+                norm_largest_model = np.random.uniform(min_lms,max_lms)
+            elif LMS_SAMPLING=="normal":
                 norm_largest_model = truncated_normal(mean=largest_model_share_mean,std_dev=lms_stddev,min=min_lms,max=max_lms, size=1)[0]
+            else:
+                raise ValueError(f"Invalid LMS_SAMPLING: {LMS_SAMPLING}")
 
 
             for year in all_years:
@@ -490,13 +497,11 @@ def main():
                 agg_training_compute = 10**log_agg_training_compute  # total compute used over the year
 
                 #set largest model that year 
-                if FRONTIER_MODEL_GROWTH=='coupled':
-                    if year in fit_years: #remove this eventually
-                        largest_model = FIT_DATA[year]['largest_model']
-                        largest_model = norm_largest_model * agg_training_compute
+                if year in fit_years: #remove this eventually
+                    largest_model = norm_largest_model * agg_training_compute
+                else:
+                    largest_model = norm_largest_model * agg_training_compute
 
-                    else:
-                        largest_model = norm_largest_model * agg_training_compute
 
 
 
@@ -630,6 +635,8 @@ def main():
 
     if 1: # verification retrodiction
 
+        #backtesting the absolute thresholds
+
         retrodict_years=fit_years
 
         #observed
@@ -651,39 +658,54 @@ def main():
                         count = (sum(x >= 10**threshold for x in year_data['samples'])).astype(int)
                         retrodict_counts[year][threshold].append(count)
 
-        # Calculate median for each year and threshold
-        retrodict_median_counts = {year: [] for year in retrodict_years}
+        # Calculate percentiles for each year and threshold
+
+        retrodict_percentile_counts = {year: {percentile: [] for percentile in CI_percentiles} for year in retrodict_years}
         for year in retrodict_years:
             for threshold in retrodict_thresholds:
-                median_count = (np.median(retrodict_counts[year][threshold])).astype(int)
-                retrodict_median_counts[year].append(median_count)
+                for percentile in CI_percentiles:
+                    percentile_count = (np.percentile(retrodict_counts[year][threshold], percentile)).astype(int)
+                    retrodict_percentile_counts[year][percentile].append(percentile_count)
 
-        df_retrodict = pd.DataFrame(retrodict_median_counts,
-                                index=[f'{10**t:.2e}' for t in retrodict_thresholds])
-        df_retrodict.index.name = 'Threshold'
+        dfs_retrodict = {}
+        for percentile in CI_percentiles:
+            dfs_retrodict[percentile] = pd.DataFrame(
+                {year: retrodict_percentile_counts[year][percentile] for year in retrodict_years},
+                index=[f'{10**t:.2e}' for t in retrodict_thresholds]
+            )
+            dfs_retrodict[percentile].index.name = 'Threshold'
 
         # Take cumulative sum across years for both dataframes
         df_observed_cumulative = df_observed.cumsum(axis=1)
-        df_retrodict_cumulative = df_retrodict.cumsum(axis=1)
+        dfs_retrodict_cumulative = {percentile: df.cumsum(axis=1) for percentile, df in dfs_retrodict.items()}
 
 
-        # Create dataframe with observed and retrodicted values
+        # Create dataframe with observed and retrodicted values for each percentile
         combined_df = pd.DataFrame(index=df_observed_cumulative.index)
 
-        # Fill in the values as tuples of (observed, retrodicted)
         for year in df_observed_cumulative.columns:
-            combined_df[year] = list(zip(df_observed_cumulative[year], df_retrodict_cumulative[year]))
+            combined_df[year] = [f"{obs} ({','.join(str(x) for x in ret)})" for obs, ret in zip(
+                df_observed_cumulative[year],
+                zip(*[dfs_retrodict_cumulative[percentile][year] for percentile in CI_percentiles])
+            )]
+
+        # Calculate the difference between observed and retrodicted values for each percentile
+        difference_df = pd.DataFrame(index=df_observed_cumulative.index)
+
+        for year in df_observed_cumulative.columns:
+            differences = []
+            for obs, *rets in zip(df_observed_cumulative[year], 
+                                *[dfs_retrodict_cumulative[percentile][year] for percentile in CI_percentiles]):
+                differences.append(f"({obs-rets[0]}, {obs-rets[1]}, {obs-rets[2]})")
+            difference_df[year] = differences
 
 
-        # Calculate the difference between observed and retrodicted values
-        difference_df = df_observed_cumulative - df_retrodict_cumulative
 
         absolute_threshold_retrodicted = combined_df
         absolute_threshold_retrodicted_difference = difference_df
 
 
 
-        #retrodiction for frontier counts
         # Group data into specified periods
         df['period'] = round_dates(df['date'], period_freq)
         df['log_compute'] = np.log10(df['compute'])
@@ -704,7 +726,7 @@ def main():
                     width_year_counts += count
                 frontier_counts[year][width] = width_year_counts
 
-        # Calculate median projection for retrodicted counts
+        # Calculate frontier counts for each percentile
         sample_frontier_counts = {year: {width: [] for width in threshold_widths} for year in fit_years}
 
         for sim, sim_data in COMPUTE_SAMPLE_DATA.items():
@@ -723,35 +745,34 @@ def main():
                         width_year_counts += within_threshold_condition.sum() + above_frontier_condition.sum()
                     sample_frontier_counts[year][width].append(width_year_counts)
 
-        # Calculate median for each year and width
-        median_sample_frontier_counts = {year: {width: (np.median(sample_frontier_counts[year][width])).astype(int) for width in threshold_widths} for year in fit_years}
+        # Calculate percentile counts for each year and width
+        percentile_frontier_counts = {year: {width: {percentile: [] for percentile in CI_percentiles} for width in threshold_widths} for year in fit_years}
+        for year in fit_years:
+            for width in threshold_widths:
+                for percentile in CI_percentiles:
+                    percentile_count = (np.percentile(sample_frontier_counts[year][width], percentile)).astype(int)
+                    percentile_frontier_counts[year][width][percentile] = percentile_count
 
-        combined_counts = {}
-
-        for width in threshold_widths:
-            combined_counts[width] = {}
-            for year in fit_years:
-                a = frontier_counts[year][width]
-                b = median_sample_frontier_counts[year][width]
-                combined_counts[width][year] = (a, b)
-
-        combined_df = pd.DataFrame(combined_counts).T
+        # Create combined dataframe with observed and retrodicted values
+        combined_df = pd.DataFrame(index=threshold_widths)
         combined_df.index.name = 'width'
-        combined_df.columns.name = 'year'
 
+        for year in fit_years:
+            combined_df[year] = [f"{frontier_counts[year][width]} ({','.join(str(percentile_frontier_counts[year][width][p]) for p in CI_percentiles)})" for width in threshold_widths]
 
-        difference_counts = {}
-
-        for width in threshold_widths:
-            difference_counts[width] = {}
-            for year in fit_years:
-                observed = frontier_counts[year][width]
-                predicted = median_sample_frontier_counts[year][width]
-                difference_counts[width][year] = observed - predicted
-
-        difference_df = pd.DataFrame(difference_counts).T
+        # Calculate differences between observed and retrodicted values
+        difference_df = pd.DataFrame(index=threshold_widths)
         difference_df.index.name = 'width'
-        difference_df.columns.name = 'year'
+
+        for year in fit_years:
+            differences = []
+            for width in threshold_widths:
+                obs = frontier_counts[year][width]
+                rets = [percentile_frontier_counts[year][width][p] for p in CI_percentiles]
+                differences.append(f"({obs-rets[0]}, {obs-rets[1]}, {obs-rets[2]})")
+            difference_df[year] = differences
+
+
 
         frontier_threshold_retrodicted = combined_df
         frontier_threshold_retrodicted_difference = difference_df
@@ -761,6 +782,8 @@ def main():
     if 1: # predictions
 
         #predictions for absolute thresholds
+        ## regular counts
+
         threshold_counts_all_simulations = {year: {threshold: [] for threshold in thresholds} for year in pred_years.astype(int).ravel()}
 
         # Iterate over each simulation
@@ -771,42 +794,43 @@ def main():
                         count = sum(x >= 10**threshold for x in samples['samples'])
                         threshold_counts_all_simulations[year][threshold].append(count)
 
-        # Calculate median and 90% CI for each year and threshold
+        # Calculate counts for each percentile in CI_percentiles
         threshold_counts_summary = {year: [] for year in pred_years.astype(int).ravel()}
         for year in pred_years.astype(int).ravel():
             for threshold in thresholds:
                 counts = threshold_counts_all_simulations[year][threshold]
-                median_count = np.median(counts)
-                lower_bound = np.percentile(counts, 5)
-                upper_bound = np.percentile(counts, 95)
-                threshold_counts_summary[year].append(f"{median_count:.0f} ({lower_bound:.0f}-{upper_bound:.0f})")
+                percentile_counts = [np.percentile(counts, p) for p in CI_percentiles]
+                threshold_counts_summary[year].append(f"{percentile_counts[1]:.0f} ({percentile_counts[0]:.0f}-{percentile_counts[2]:.0f})")
 
-        df_median_counts = pd.DataFrame({year: [int(round(np.median(threshold_counts_all_simulations[year][threshold]))) for threshold in thresholds] for year in pred_years.astype(int).ravel()}, index=[f'>1e{t}' for t in thresholds])
-        df_5th_percentile_counts = pd.DataFrame({year: [int(round(np.percentile(threshold_counts_all_simulations[year][threshold], 5))) for threshold in thresholds] for year in pred_years.astype(int).ravel()}, index=[f'>1e{t}' for t in thresholds])
-        df_95th_percentile_counts = pd.DataFrame({year: [int(round(np.percentile(threshold_counts_all_simulations[year][threshold], 95))) for threshold in thresholds] for year in pred_years.astype(int).ravel()}, index=[f'>1e{t}' for t in thresholds])
+        # Create DataFrames for each percentile
+        percentile_dfs = {}
+        for percentile in CI_percentiles:
+            percentile_dfs[percentile] = pd.DataFrame(
+                {year: [int(round(np.percentile(threshold_counts_all_simulations[year][threshold], percentile))) 
+                        for threshold in thresholds] 
+                for year in pred_years.astype(int).ravel()},
+                index=[f'>1e{t}' for t in thresholds]
+            )
 
         # Make cumulative across years
-        df_median_cumulative = df_median_counts.cumsum(axis=1)
-        df_5th_percentile_cumulative = df_5th_percentile_counts.cumsum(axis=1)
-        df_95th_percentile_cumulative = df_95th_percentile_counts.cumsum(axis=1)
+        percentile_dfs_cumulative = {
+            percentile: df.cumsum(axis=1) 
+            for percentile, df in percentile_dfs.items()
+        }
 
         # Combine into a single DataFrame
-        df_combined_cumulative = df_median_cumulative.astype(str) + " (" + df_5th_percentile_cumulative.astype(str) + "-" + df_95th_percentile_cumulative.astype(str) + ")"
-
-        if 0: 
-            for sim in range(len(COMPUTE_SAMPLE_DATA)):
-                for year, samples in COMPUTE_SAMPLE_DATA[sim].items():
-                    if year in pred_years:
-                        print(f"Year {year}: {len(samples['samples'])} samples")
-
+        df_combined_cumulative = pd.DataFrame()
+        for year in percentile_dfs_cumulative[50].columns:
+            for idx in percentile_dfs_cumulative[50].index:
+                values = [str(percentile_dfs_cumulative[p].loc[idx, year]) for p in CI_percentiles]
+                df_combined_cumulative.loc[idx, year] = f"[{', '.join(values)}]"
 
         absolute_threshold_predicted = df_combined_cumulative
 
 
-        #predictions for frontier counts
-        # Generate period data for years 2024-2029 (2029 not inclusive)
-        period_data = pd.date_range(start='2024-01-01', end='2029-01-01', freq='6M').strftime('%Y-%m-%d %H:%M:%S').tolist()
-        
+
+        #period_data = pd.date_range(start='2024-01-01', end='2029-01-01', freq=period_freq).strftime('%Y-%m-%d %H:%M:%S').tolist()
+
         frontier_counts_all_simulations = {year: {width: [] for width in threshold_widths} for year in pred_years}
 
         for sim in range(len(COMPUTE_SAMPLE_DATA)):
@@ -825,24 +849,27 @@ def main():
                         count = within_threshold_condition.sum() + above_frontier_condition.sum() #how many models released this period within thresholds of largest model seen so far.
                         width_year_counts += count
                     frontier_counts_all_simulations[year][width].append(width_year_counts)
-        
-        # Calculate median and 90% CI for each year and width
-        frontier_counts_summary = {year: [] for year in pred_years}
-        for year in pred_years:
-            for width in threshold_widths:
-                counts = frontier_counts_all_simulations[year][width]
-                median_count = np.median(counts)
-                lower_bound = np.percentile(counts, 5)
-                upper_bound = np.percentile(counts, 95)
-                frontier_counts_summary[year].append(f"{median_count:.0f} ({lower_bound:.0f}-{upper_bound:.0f})")
 
-        # Convert to DataFrame
-        df_frontier_counts = pd.DataFrame(frontier_counts_summary).T
-        df_frontier_counts.index.name = 'Year'
-        df_frontier_counts.columns = [f'Within {width} OOM' for width in threshold_widths]
-        df_frontier_counts = df_frontier_counts.transpose()
 
-        frontier_threshold_predicted = df_frontier_counts
+
+        # Create DataFrames for each percentile
+        frontier_percentile_dfs = {}
+        for percentile in CI_percentiles:
+            frontier_percentile_dfs[percentile] = pd.DataFrame(
+                {year: [int(round(np.percentile(frontier_counts_all_simulations[year][width], percentile)))
+                        for width in threshold_widths]
+                for year in pred_years},
+                index=[f'Within {width} OOM' for width in threshold_widths]
+            )
+
+        # Combine into a single DataFrame
+        df_frontier_combined = pd.DataFrame()
+        for year in frontier_percentile_dfs[50].columns:
+            for idx in frontier_percentile_dfs[50].index:
+                values = [str(frontier_percentile_dfs[p].loc[idx, year]) for p in CI_percentiles]
+                df_frontier_combined.loc[idx, year] = f"[{', '.join(values)}]"
+
+        frontier_threshold_predicted = df_frontier_combined
 
 
     if 1: #display and save
