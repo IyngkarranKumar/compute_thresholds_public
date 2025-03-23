@@ -1,6 +1,6 @@
 
 
-def main():
+def main(_alloc_=40/60,_g_=2.25):
 
     if 1: #===IMPORTS===
             
@@ -119,10 +119,10 @@ def main():
                 2027: 20/80,
                 2028: 20/80,
             }
-        g_global_AI_compute_mean=3.5
+        g_global_AI_compute_mean=2.25
         g_AI_workload_share_mean=1.5 #assuming AI_compute_usage/AI_compute_capacity = const - 3.0 gets the two superposed!
         g_total = g_global_AI_compute_mean + g_AI_workload_share_mean
-        g_stdev=0.0 #get more reasonable values by fixing rather than computing from historical data
+        g_stdev=0.5 #get more reasonable values by fixing rather than computing from historical data
 
 
         #allocation fit parameters
@@ -142,7 +142,7 @@ def main():
         #IMPORTANT PARAMETER - largest model share
         LMS_SAMPLING="uniform"
         min_norm_m = 10**-7
-        largest_model_share_mean,lms_stddev,min_lms,max_lms=0.3, 0.1,0.05,0.50 #I want 0.05 and 0.5 as min and max
+        largest_model_share_mean,lms_stddev,min_lms,max_lms=0.3, 0.1,0.05,0.5 #I want 0.05 and 0.5 as min and max
 
         n_catgs = 50
 
@@ -152,18 +152,43 @@ def main():
         retrodict_thresholds=[23, 24, 25]
         threshold_widths = [0.5, 1, 1.5]  # List of threshold widths to analyze
         period_freq = '3M'  # frequency for doing frontier counts
-        CI_percentiles=[10,50,90]
+        CI_percentiles=[1,50,99]
+
+
+        #function parameters
+        fixed_alloc=40/60
+        g_global_AI_compute_mean=4.0
 
 
         #SAVE CONFIG
         SAVE_CONFIG={
-            "historical allocation":hist_alloc,
-            "(g_global_AI_compute, g_AI_workload_share)":(g_global_AI_compute_mean, g_AI_workload_share_mean) if method_choice=='method 2027' else None,
-            "compute allocation config": "dynamic inference allocation" if DYNAMIC_ALLOCATION else "fixed inference allocation",
-            "allocations": pred_alloc_dict if DYNAMIC_ALLOCATION else fixed_alloc,
-            "frontier model config": f"lms_mean={largest_model_share_mean}, lms_stddev={lms_stddev}",
-            "n_catgs":n_catgs,
-            "allocation":CONST_FM if CONST_FM else LIN_EXTRAP_FM if LIN_EXTRAP_FM else CUSTOM_FM,
+            "historical allocation": hist_alloc,
+            "allocation type": "fixed" if FIXED_ALLOCATION else "dynamic",
+            "fixed allocation": fixed_alloc if FIXED_ALLOCATION else None,
+            "predicted allocations": pred_alloc_dict if DYNAMIC_ALLOCATION else None,
+            "growth parameters": {
+                "g_global_AI_compute_mean": g_global_AI_compute_mean,
+                "g_AI_workload_share_mean": g_AI_workload_share_mean,
+                "g_stdev": g_stdev
+            },
+            "frontier model parameters": {
+                "type": "constant" if CONST_FM else "linear_extrap" if LIN_EXTRAP_FM else "custom",
+                "custom_fm_grad": custom_fm_grad if CUSTOM_FM else None,
+                "lms_sampling": LMS_SAMPLING,
+                "min_norm_m": min_norm_m,
+                "lms_mean": largest_model_share_mean,
+                "lms_stddev": lms_stddev,
+                "min_lms": min_lms,
+                "max_lms": max_lms
+            },
+            "model categories": n_catgs,
+            "threshold parameters": {
+                "thresholds": thresholds,
+                "retrodict_thresholds": retrodict_thresholds,
+                "threshold_widths": threshold_widths,
+                "period_freq": period_freq,
+                "CI_percentiles": CI_percentiles
+            }
         }
 
     if 1: #===DATA LOADING===
@@ -394,7 +419,7 @@ def main():
         FIT_DATA={year:None for year in fit_years}
 
 
-        print('Fitting f_M coefficients')
+        logging.info('Fitting f_M coefficients')
 
         for idx,year in enumerate(fit_years):
             total_compute=aggregate_compute[aggregate_compute.index==year].values
@@ -879,10 +904,10 @@ def main():
             logging.info("=== Retrodicted Thresholds ===")
             logging.info("=== Absolute Threshold Retrodicted ===")
             display(absolute_threshold_retrodicted)
-            display(absolute_threshold_retrodicted_difference)
+            #display(absolute_threshold_retrodicted_difference)
             logging.info("=== Frontier Threshold Retrodicted ===")
             display(frontier_threshold_retrodicted)
-            display(frontier_threshold_retrodicted_difference)
+            #display(frontier_threshold_retrodicted_difference)
             logging.info("=== Predicted Thresholds ===")
             logging.info("=== Absolute Threshold Predicted ===")
             display(absolute_threshold_predicted)
@@ -914,6 +939,5 @@ def main():
                 f.write('\n\n')
                 f.write("Frontier Threshold Predicted:\n")
                 frontier_threshold_predicted.to_csv(f,sep='\t')
-
 
 main()
