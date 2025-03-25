@@ -152,7 +152,7 @@ def main(_alloc_=40/60,_g_=2.25):
         retrodict_thresholds=[23, 24, 25]
         threshold_widths = [0.5, 1, 1.5]  # List of threshold widths to analyze
         period_freq = '3M'  # frequency for doing frontier counts
-        CI_percentiles=[1,50,99]
+        CI_percentiles=[10,50,90]
 
 
         #function parameters
