@@ -1,6 +1,8 @@
+import config, importlib
+importlib.reload(config)
+from config import Config
 
-
-def main(_alloc_=40/60,_g_=2.25):
+def main(Config):
 
     if 1: #===IMPORTS===
             
@@ -91,107 +93,41 @@ def main(_alloc_=40/60,_g_=2.25):
             return np.clip(samples, min, max) 
 
 
-    if 1: #===CONFIG===
+    if 1: #===Config===
 
-        #workflow config
-        PLOT_SCHEMATIC_SCATTER=False
-        TRAINING_COMPUTE_PLOTS=False
-        FIT_ALLOCATION_PLOTS=False
-        GENERATED_SAMPLE_PLOTS=False
-        SAVE_RESULTS=False
-
-        #sampling parameters
-        n_simulations = 100 #for bootstrappng, sampling parameters etc. n_simulations = 10 #for bootstrappng, sampling parameters etc. 
-
-        #training compute extrapolation config 
-        AI2027_EXTRAP=True
-        method_choice="method 2027" #['linear extrapolation', 'method 2027']
-        hist_alloc=40/60
-        hist_alloc_multiplier=1+(1/hist_alloc)
-        FIXED_ALLOCATION=True
-        fixed_alloc=40/60
-        DYNAMIC_ALLOCATION=False #inference scaling continues improving
-        assert(FIXED_ALLOCATION+DYNAMIC_ALLOCATION)==1
-        pred_alloc_dict = {
-                2024: 40/60,
-                2025: 30/70,
-                2026: 30/70,
-                2027: 30/70,
-                2028: 20/80,
-            }
-        g_global_AI_compute_mean=3.5
-        g_AI_workload_share_mean=1.5 #assuming AI_compute_usage/AI_compute_capacity = const - 3.0 gets the two superposed!
-        g_total = g_global_AI_compute_mean + g_AI_workload_share_mean
-        g_stdev=0.0 #get more reasonable values by fixing rather than computing from historical data
-
-
-        #allocation fit parameters
-        fit_years=np.arange(2020,2024)
-        pred_years = np.arange(2024,2029)
-        constraint_point=(1,1)
-        filter_thresholds=1e-20 #ignore models smaller than this
-
-        ##SAMPLING PARAMETERS
-        ALLOC_FIT_TYPE='cumulative' #[cumulative, categorical]
-        POINT_CUM_ALLOC_PARAMS=False #takes mean of historical datas
-        DISTRIBUTION_CUM_ALLOC_PARAMS=True
-        grad_cum_alloc_min, grad_cum_alloc_max = 1.0, 1.0 #for setting up uncertainty modelling
-        assert(POINT_CUM_ALLOC_PARAMS+DISTRIBUTION_CUM_ALLOC_PARAMS)==1, "Only one of DEFAULT_CUM_ALLOC_PARAMS or CUSTOM_CUM_ALLOC_PARAMS can be True"
-
-        #IMPORTANT PARAMETER - largest model share
-        LMS_SAMPLING="uniform"
-        assert LMS_SAMPLING in ['gaussian', 'uniform']
-        largest_model_share_mean,lms_stddev,min_lms,max_lms=0.3, 0.1,0.05,0.50
-
-        #min m sampling
-        min_norm_m_min,min_norm_m_max = 1e-8, 1e-6 #wacky variable names
-
-        #n_catg setting (higher the better, up to the point where delta M gets too small)
-        n_catgs = 20
-
-
-        #threshold counting PARAMETERS
-        thresholds=[25, 26, 27, 28, 29]
-        retrodict_thresholds=[23, 24, 25]
-        threshold_widths = [0.5, 1, 1.5]  # List of threshold widths to analyze
-        period_freq = '3M'  # frequency for doing frontier counts
-        CI_percentiles=[10,50,90]
-
-
-
-        #SAVE CONFIG
-        SAVE_CONFIG={
-            "historical allocation": hist_alloc,
-            "allocation type": "fixed" if FIXED_ALLOCATION else "dynamic",
-            "fixed allocation": fixed_alloc if FIXED_ALLOCATION else None,
-            "predicted allocations": pred_alloc_dict if DYNAMIC_ALLOCATION else None,
+        #SAVE Config
+        SAVE_Config={
+            "historical allocation": Config.hist_alloc,
+            "allocation type": "fixed" if Config.FIXED_ALLOCATION else "dynamic",
+            "fixed allocation": Config.fixed_alloc if Config.FIXED_ALLOCATION else None,
+            "predicted allocations": Config.pred_alloc_dict if Config.DYNAMIC_ALLOCATION else None,
             "growth parameters": {
-                "g_global_AI_compute_mean": g_global_AI_compute_mean,
-                "g_AI_workload_share_mean": g_AI_workload_share_mean,
-                "g_stdev": g_stdev
+                "Config.g_global_AI_compute_mean": Config.g_global_AI_compute_mean,
+                "Config.g_AI_workload_share_mean": Config.g_AI_workload_share_mean,
+                "Config.g_stdev": Config.g_stdev
             },
             "sampling parameters": {
-                "alloc_fit_type": ALLOC_FIT_TYPE,
-                "point_cum_alloc_params": POINT_CUM_ALLOC_PARAMS,
-                "distribution_cum_alloc_params": DISTRIBUTION_CUM_ALLOC_PARAMS,
-                "grad_cum_alloc_range": [grad_cum_alloc_min, grad_cum_alloc_max],
-                "lms_sampling": LMS_SAMPLING,
+                "Config.ALLOC_FIT_TYPE": Config.ALLOC_FIT_TYPE,
+                "Config.POINT_CUM_ALLOC_PARAMS": Config.POINT_CUM_ALLOC_PARAMS,
+                "Config.DISTRIBUTION_CUM_ALLOC_PARAMS": Config.DISTRIBUTION_CUM_ALLOC_PARAMS,
+                "grad_cum_alloc_range": [Config.grad_cum_alloc_min, Config.grad_cum_alloc_max],
+                "Config.LMS_SAMPLING": Config.LMS_SAMPLING,
                 "largest_model_share": {
-                    "mean": largest_model_share_mean,
-                    "stddev": lms_stddev,
-                    "min": min_lms,
-                    "max": max_lms
+                    "mean": Config.largest_model_share_mean,
+                    "stddev": Config.lms_stddev,
+                    "min": Config.min_lms,
+                    "max": Config.max_lms
                 },
-                "min_norm_m_range": [min_norm_m_min, min_norm_m_max],
-                "n_catgs": n_catgs
+                "min_norm_m_range": [Config.min_norm_m_min, Config.min_norm_m_max],
+                "Config.n_catgs": Config.n_catgs
             },
-            "model categories": n_catgs,
+            "model categories": Config.n_catgs,
             "threshold parameters": {
-                "thresholds": thresholds,
-                "retrodict_thresholds": retrodict_thresholds,
-                "threshold_widths": threshold_widths,
-                "period_freq": period_freq,
-                "CI_percentiles": CI_percentiles
+                "Config.thresholds": Config.thresholds,
+                "Config.retrodict_thresholds": Config.retrodict_thresholds,
+                "Config.threshold_widths": Config.threshold_widths,
+                "Config.period_freq": Config.period_freq,
+                "Config.CI_percentiles": Config.CI_percentiles
             }
         }
 
@@ -255,7 +191,7 @@ def main(_alloc_=40/60,_g_=2.25):
             logging.info("%d: %d", year, count)
 
         
-        if PLOT_SCHEMATIC_SCATTER: #generate basic scatterplot
+        if Config.PLOT_SCHEMATIC_SCATTER: #generate basic scatterplot
             fig = sns.scatterplot(data=df[df['date']>'2010-01-01'], x='date',y='compute')
             fig.set(yscale='log')
             plt.grid(alpha=0.5)
@@ -299,7 +235,7 @@ def main(_alloc_=40/60,_g_=2.25):
 
 
 
-        for sim in range(n_simulations):
+        for sim in range(Config.n_simulations):
             LOG_AGGREGATE_COMPUTE_DATA[sim] = {}
 
             year_grouped_df=df.groupby(df['date'][df['date']>'2010-01-01'].dt.year)
@@ -311,15 +247,15 @@ def main(_alloc_=40/60,_g_=2.25):
 
             if 1: #do historical data
                 LOG_AGGREGATE_COMPUTE_DATA[sim]['historical aggregate training compute'] = {int(k): v for k, v in log_aggregate_compute.items()}
-                LOG_AGGREGATE_COMPUTE_DATA[sim]['historical aggregate total compute'] = {int(k): v+np.log10(hist_alloc_multiplier) for k, v in log_aggregate_compute.items()}
+                LOG_AGGREGATE_COMPUTE_DATA[sim]['historical aggregate total compute'] = {int(k): v+np.log10(Config.hist_alloc_multiplier) for k, v in log_aggregate_compute.items()}
 
-            if AI2027_EXTRAP:
+            if Config.AI2027_EXTRAP:
                 training_usage_2023 = 10**log_aggregate_compute.get(2023)
                 total_usage_2023 = 2 * training_usage_2023
 
                 AI_compute_usage={}
-                for idx,year in enumerate(range(2024, 2029)):
-                    growth_rate = g_total+np.random.normal(0,g_stdev)
+                for idx,year in enumerate(Config.pred_years):
+                    growth_rate = Config.g_total+np.random.normal(0,Config.g_stdev)
                     AI_compute_usage[year] = ((growth_rate) ** (idx + 1))*total_usage_2023 
 
                 log_aggregate_compute_predictions_dict = {year: np.log10(compute) for year, compute in AI_compute_usage.items()}
@@ -328,17 +264,17 @@ def main(_alloc_=40/60,_g_=2.25):
 
             #do allocations
             if 1: 
-                if FIXED_ALLOCATION:
-                    train_alloc,inference_alloc=alloc_ratio_to_alloc(alloc_ratio=fixed_alloc)
-                    LOG_AGGREGATE_COMPUTE_DATA[sim]['aggregate training compute'] = {year: val + np.log10(train_alloc) for year, val in LOG_AGGREGATE_COMPUTE_DATA[sim][f"Total-{method_choice}"].items()}
-                    LOG_AGGREGATE_COMPUTE_DATA[sim]['aggregate inference compute'] = {year: val + np.log10(inference_alloc) for year, val in LOG_AGGREGATE_COMPUTE_DATA[sim][f"Total-{method_choice}"].items()}
+                if Config.FIXED_ALLOCATION:
+                    train_alloc,inference_alloc=alloc_ratio_to_alloc(alloc_ratio=Config.fixed_alloc)
+                    LOG_AGGREGATE_COMPUTE_DATA[sim]['aggregate training compute'] = {year: val + np.log10(train_alloc) for year, val in LOG_AGGREGATE_COMPUTE_DATA[sim][f"Total-{Config.method_choice}"].items()}
+                    LOG_AGGREGATE_COMPUTE_DATA[sim]['aggregate inference compute'] = {year: val + np.log10(inference_alloc) for year, val in LOG_AGGREGATE_COMPUTE_DATA[sim][f"Total-{Config.method_choice}"].items()}
 
-                if DYNAMIC_ALLOCATION:
+                if Config.DYNAMIC_ALLOCATION:
                     train_alloc_dict = {}
                     inference_alloc_dict = {}
 
-                    for year, val in LOG_AGGREGATE_COMPUTE_DATA[sim][f'Total-{method_choice}'].items():
-                        alloc_ratio=pred_alloc_dict.get(year,1.0)
+                    for year, val in LOG_AGGREGATE_COMPUTE_DATA[sim][f'Total-{Config.method_choice}'].items():
+                        alloc_ratio=Config.pred_alloc_dict.get(year,1.0)
                         train_alloc, inference_alloc = alloc_ratio_to_alloc(alloc_ratio=alloc_ratio)
                         train_alloc_dict[year] = val + np.log10(train_alloc)
                         inference_alloc_dict[year] = val + np.log10(inference_alloc)
@@ -347,7 +283,7 @@ def main(_alloc_=40/60,_g_=2.25):
                     LOG_AGGREGATE_COMPUTE_DATA[sim]['aggregate inference compute'] = inference_alloc_dict
 
 
-        if TRAINING_COMPUTE_PLOTS:
+        if Config.TRAINING_COMPUTE_PLOTS:
             plt.figure(figsize=(10, 6))
 
             # Plot extrapolations for each method
@@ -369,7 +305,7 @@ def main(_alloc_=40/60,_g_=2.25):
             for method in colors.keys():
                 all_sim_values = defaultdict(list)
                 
-                for sim in range(n_simulations):
+                for sim in range(Config.n_simulations):
                     predictions = LOG_AGGREGATE_COMPUTE_DATA[sim].get(method, {})
                     for year, value in predictions.items():
                         all_sim_values[year].append(value)
@@ -393,14 +329,14 @@ def main(_alloc_=40/60,_g_=2.25):
             # Plot compute allocations for different tau values
             plt.figure(figsize=(10, 6))
 
-            years = sorted(pred_alloc_dict.keys())
+            years = sorted(Config.pred_alloc_dict.keys())
 
             train_allocs = []
             inference_allocs = []
-            if FIXED_ALLOCATION:
-                train_allocs, inference_allocs = alloc_ratio_to_alloc(np.ones(years.__len__()) * fixed_alloc)
-            if DYNAMIC_ALLOCATION:
-                train_allocs, inference_allocs = alloc_ratio_to_alloc(np.array(list(pred_alloc_dict.values())))
+            if Config.FIXED_ALLOCATION:
+                train_allocs, inference_allocs = alloc_ratio_to_alloc(np.ones(years.__len__()) * Config.fixed_alloc)
+            if Config.DYNAMIC_ALLOCATION:
+                train_allocs, inference_allocs = alloc_ratio_to_alloc(np.array(list(Config.pred_alloc_dict.values())))
 
             plt.plot(years, train_allocs, 'g-', label='Training Allocation')
             plt.plot(years, inference_allocs, 'r-', label='Inference Allocation')
@@ -417,12 +353,12 @@ def main(_alloc_=40/60,_g_=2.25):
 
 
     if 1: #fit allocations 
-        FIT_DATA={year:None for year in fit_years}
+        FIT_DATA={year:None for year in Config.fit_years}
 
 
         logging.info('Fitting f_M coefficients')
 
-        for idx,year in enumerate(fit_years):
+        for idx,year in enumerate(Config.fit_years):
             total_compute=aggregate_compute[aggregate_compute.index==year].values
             datapoints_year=df[df['date'].dt.year==year]['compute']
             largest_model=datapoints_year.max()
@@ -451,7 +387,7 @@ def main(_alloc_=40/60,_g_=2.25):
             #fit data
             X = np.log10(norm_sorted_computes).reshape(-1, 1)
             y = np.log10(norm_cum_alloc)
-            X_trans,y_trans=X-constraint_point[0],y-constraint_point[1]
+            X_trans,y_trans=X-Config.constraint_point[0],y-Config.constraint_point[1]
             reg_cum_alloc = linear_model.LinearRegression(fit_intercept=False).fit(X_trans, y_trans) #forcing X-a,y-b to go through (0,0) means X,y goes through (a,b)
             FIT_DATA[year]['cum_alloc_fits'] = [reg_cum_alloc.coef_[0], reg_cum_alloc.intercept_]
 
@@ -461,9 +397,9 @@ def main(_alloc_=40/60,_g_=2.25):
             FIT_DATA[year]['catg_alloc_fits'] = [reg_catg_alloc.coef_[0][0], reg_catg_alloc.intercept_[0]]
             FIT_DATA[year]['norm_catg_alloc']=norm_catg_alloc
 
-        if FIT_ALLOCATION_PLOTS:
+        if Config.FIT_ALLOCATION_PLOTS:
             fig, ax = plt.subplots(figsize=(10, 6))
-            for year in fit_years:
+            for year in Config.fit_years:
                 if year in FIT_DATA:
                     data = FIT_DATA[year]
                     norm_sorted_computes = data['compute'] / data['largest_model']
@@ -487,7 +423,7 @@ def main(_alloc_=40/60,_g_=2.25):
 
         # Log debug - Print cum_alloc_fits for all years
         logging.info("cum_alloc_fits for each year:")
-        for year in fit_years:
+        for year in Config.fit_years:
             cum_alloc_coeffs = FIT_DATA[year]['cum_alloc_fits']
             catg_alloc_coeffs = FIT_DATA[year]['catg_alloc_fits']
             logging.info(f"Year {year}: cum_alloc_fits - slope={cum_alloc_coeffs[0]:.4f}, intercept={cum_alloc_coeffs[1]:.4f}")
@@ -496,45 +432,45 @@ def main(_alloc_=40/60,_g_=2.25):
             
     if 1: #Generate compute samples
 
-        all_years=np.concatenate([fit_years, pred_years.astype(int).ravel()])
-        COMPUTE_SAMPLE_DATA = {sim: {int(year): {} for year in all_years} for sim in range(n_simulations)} #init data structure 
+        all_years=np.concatenate([Config.fit_years, Config.pred_years.astype(int).ravel()])
+        COMPUTE_SAMPLE_DATA = {sim: {int(year): {} for year in all_years} for sim in range(Config.n_simulations)} #init data structure 
 
-        for sim in range(n_simulations):
+        for sim in range(Config.n_simulations):
 
             for year in all_years:
                 #get total compute
-                if year in fit_years:
+                if year in Config.fit_years:
                     log_agg_training_compute = LOG_AGGREGATE_COMPUTE_DATA[sim]["historical aggregate training compute"][year]
-                if year in pred_years:
+                if year in Config.pred_years:
                     log_agg_training_compute = LOG_AGGREGATE_COMPUTE_DATA[sim]["aggregate training compute"][year]
                 agg_training_compute = 10**log_agg_training_compute 
 
                 #set largest model that year 
-                if LMS_SAMPLING=='gaussian':
-                    norm_largest_model = truncated_normal(mean=largest_model_share_mean,std_dev=lms_stddev,min_lms=min_lms,max_lms=max_lms, size=1)[0]
-                elif LMS_SAMPLING=='uniform':
-                    norm_largest_model = np.random.uniform(min_lms, max_lms)
+                if Config.LMS_SAMPLING=='gaussian':
+                    norm_largest_model = truncated_normal(mean=Config.largest_model_share_mean,std_dev=Config.lms_stddev,min_lms=Config.min_lms,max_lms=Config.max_lms, size=1)[0]
+                elif Config.LMS_SAMPLING=='uniform':
+                    norm_largest_model = np.random.uniform(Config.min_lms, Config.max_lms)
 
                 largest_model = norm_largest_model * agg_training_compute
                 assert largest_model <= 0.5*agg_training_compute, print(f"Year: {year}, Largest Model: {largest_model}, Total Training Compute: {agg_training_compute}")
 
                 #sample smallest model that year
-                min_norm_m = 10**(np.random.uniform(np.log10(min_norm_m_min),np.log10(min_norm_m_max)))
+                min_norm_m = 10**(np.random.uniform(np.log10(Config.min_norm_m_min),np.log10(Config.min_norm_m_max)))
 
                 # model sizes (as fraction of largest_model)
-                norm_ms = np.logspace(np.log10(min_norm_m), np.log10(1.0), num=n_catgs)
+                norm_ms = np.logspace(np.log10(min_norm_m), np.log10(1.0), num=Config.n_catgs)
                 log_norm_ms = np.log10(norm_ms)
 
 
-                assert ALLOC_FIT_TYPE in ['cumulative','categorical']
+                assert Config.ALLOC_FIT_TYPE in ['cumulative','categorical']
                 #generate compute bin allocations (catg_alloc)
-                if ALLOC_FIT_TYPE=='cumulative':
-                    assert(POINT_CUM_ALLOC_PARAMS+DISTRIBUTION_CUM_ALLOC_PARAMS)==1, "Only one of DEFAULT_CUM_ALLOC_PARAMS or CUSTOM_CUM_ALLOC_PARAMS can be True"
-                    if POINT_CUM_ALLOC_PARAMS:
+                if Config.ALLOC_FIT_TYPE=='cumulative':
+                    assert(Config.POINT_CUM_ALLOC_PARAMS+Config.DISTRIBUTION_CUM_ALLOC_PARAMS)==1, "Only one of DEFAULT_CUM_ALLOC_PARAMS or CUSTOM_CUM_ALLOC_PARAMS can be True"
+                    if Config.POINT_CUM_ALLOC_PARAMS:
                         grad_cum_alloc = np.mean([FIT_DATA[year]['cum_alloc_fits'][0] for year in FIT_DATA.keys()])
                         int_cum_alloc = np.mean([FIT_DATA[year]['cum_alloc_fits'][1] for year in FIT_DATA.keys()])
-                    elif DISTRIBUTION_CUM_ALLOC_PARAMS:
-                        grad_cum_alloc, int_cum_alloc = np.random.uniform(grad_cum_alloc_min,grad_cum_alloc_max), 0
+                    elif Config.DISTRIBUTION_CUM_ALLOC_PARAMS:
+                        grad_cum_alloc, int_cum_alloc = np.random.uniform(Config.grad_cum_alloc_min,Config.grad_cum_alloc_max), 0
                     else:
                         raise ValueError("Invalid choice of cumulative alloc params")
 
@@ -609,16 +545,16 @@ def main(_alloc_=40/60,_g_=2.25):
 
 
         logging.debug("\nNumber of samples per year:")
-        for year in pred_years.ravel():
+        for year in Config.pred_years.ravel():
             logging.debug(f"{year}: {len(COMPUTE_SAMPLE_DATA[0][year]['samples'])} samples") #take first sim
 
 
-        if GENERATED_SAMPLE_PLOTS:
+        if Config.GENERATED_SAMPLE_PLOTS:
             fig, axes = plt.subplots(3, 2, figsize=(12, 8))
             axes = axes.ravel()
 
-            for idx, year in enumerate(pred_years):
-                all_samples = [np.log10(COMPUTE_SAMPLE_DATA[sim][year]['samples']) for sim in range(n_simulations)]
+            for idx, year in enumerate(Config.pred_years):
+                all_samples = [np.log10(COMPUTE_SAMPLE_DATA[sim][year]['samples']) for sim in range(Config.n_simulations)]
                 
                 # Define a common set of x-points for KDE evaluation
                 x_points = np.linspace(15, 30, 1000)
@@ -648,19 +584,19 @@ def main(_alloc_=40/60,_g_=2.25):
             plt.tight_layout()
             plt.show()
 
-        if GENERATED_SAMPLE_PLOTS:
+        if Config.GENERATED_SAMPLE_PLOTS:
             ylims = (14, 30)
             plt.figure(figsize=(12, 6))
             
             for year in all_years:
-                if year in fit_years:
+                if year in Config.fit_years:
                     sample_data = COMPUTE_SAMPLE_DATA[0][year]
-                    plt.scatter(sample_data['date'], np.log10(sample_data['samples']), alpha=0.2, color='blue', label='Retrodicted Samples' if year == fit_years[0] else "",marker='x')
-                if year in pred_years:
+                    plt.scatter(sample_data['date'], np.log10(sample_data['samples']), alpha=0.2, color='blue', label='Retrodicted Samples' if year == Config.fit_years[0] else "",marker='x')
+                if year in Config.pred_years:
                     sample_data = COMPUTE_SAMPLE_DATA[0][year]
-                    plt.scatter(sample_data['date'], np.log10(sample_data['samples']), alpha=0.5, label='Projected Samples' if year == pred_years[0] else "", color='red')
+                    plt.scatter(sample_data['date'], np.log10(sample_data['samples']), alpha=0.5, label='Projected Samples' if year == Config.pred_years[0] else "", color='red')
 
-            plt.scatter(df[df['year'].isin(fit_years)]['date'], np.log10(df[df['year'].isin(fit_years)]['compute']), alpha=1.0, label='Historical',marker='x')
+            plt.scatter(df[df['year'].isin(Config.fit_years)]['date'], np.log10(df[df['year'].isin(Config.fit_years)]['compute']), alpha=1.0, label='Historical',marker='x')
 
             plt.xlabel('Year')
             plt.ylabel('Log Compute (FLOPs)')
@@ -673,43 +609,43 @@ def main(_alloc_=40/60,_g_=2.25):
 
     if 1: # verification retrodiction
 
-        #backtesting the absolute thresholds
+        #backtesting the absolute Config.thresholds
 
-        retrodict_years=fit_years
+        retrodict_years=Config.fit_years
 
         #observed
         # Create DataFrame from observed counts
         df_observed = pd.DataFrame.from_dict({threshold: {year: sum(df[df['year'] == year]['compute'] > 10**threshold)
                                                         for year in retrodict_years}
-                                            for threshold in retrodict_thresholds}, 
+                                            for threshold in Config.retrodict_thresholds}, 
                                             orient='index')
-        df_observed.index = [f'{10**threshold:.2e}' for threshold in retrodict_thresholds]
+        df_observed.index = [f'{10**threshold:.2e}' for threshold in Config.retrodict_thresholds]
         df_observed.index.name = 'Threshold'
 
         # Create retrodict counts dictionary
-        retrodict_counts = {year: {threshold: [] for threshold in retrodict_thresholds} for year in retrodict_years}
+        retrodict_counts = {year: {threshold: [] for threshold in Config.retrodict_thresholds} for year in retrodict_years}
 
         for sim, sim_data in COMPUTE_SAMPLE_DATA.items():
             for year, year_data in sim_data.items():
                 if year in retrodict_years:
-                    for threshold in retrodict_thresholds:
+                    for threshold in Config.retrodict_thresholds:
                         count = (sum(x >= 10**threshold for x in year_data['samples'])).astype(int)
                         retrodict_counts[year][threshold].append(count)
 
         # Calculate percentiles for each year and threshold
 
-        retrodict_percentile_counts = {year: {percentile: [] for percentile in CI_percentiles} for year in retrodict_years}
+        retrodict_percentile_counts = {year: {percentile: [] for percentile in Config.CI_percentiles} for year in retrodict_years}
         for year in retrodict_years:
-            for threshold in retrodict_thresholds:
-                for percentile in CI_percentiles:
+            for threshold in Config.retrodict_thresholds:
+                for percentile in Config.CI_percentiles:
                     percentile_count = (np.percentile(retrodict_counts[year][threshold], percentile)).astype(int)
                     retrodict_percentile_counts[year][percentile].append(percentile_count)
 
         dfs_retrodict = {}
-        for percentile in CI_percentiles:
+        for percentile in Config.CI_percentiles:
             dfs_retrodict[percentile] = pd.DataFrame(
                 {year: retrodict_percentile_counts[year][percentile] for year in retrodict_years},
-                index=[f'{10**t:.2e}' for t in retrodict_thresholds]
+                index=[f'{10**t:.2e}' for t in Config.retrodict_thresholds]
             )
             dfs_retrodict[percentile].index.name = 'Threshold'
 
@@ -724,7 +660,7 @@ def main(_alloc_=40/60,_g_=2.25):
         for year in df_observed_cumulative.columns:
             combined_df[year] = [f"{obs} ({','.join(str(x) for x in ret)})" for obs, ret in zip(
                 df_observed_cumulative[year],
-                zip(*[dfs_retrodict_cumulative[percentile][year] for percentile in CI_percentiles])
+                zip(*[dfs_retrodict_cumulative[percentile][year] for percentile in Config.CI_percentiles])
             )]
 
         # Calculate the difference between observed and retrodicted values for each percentile
@@ -733,7 +669,7 @@ def main(_alloc_=40/60,_g_=2.25):
         for year in df_observed_cumulative.columns:
             differences = []
             for obs, *rets in zip(df_observed_cumulative[year], 
-                                *[dfs_retrodict_cumulative[percentile][year] for percentile in CI_percentiles]):
+                                *[dfs_retrodict_cumulative[percentile][year] for percentile in Config.CI_percentiles]):
                 differences.append(f"({obs-rets[0]}, {obs-rets[1]}, {obs-rets[2]})")
             difference_df[year] = differences
 
@@ -745,15 +681,15 @@ def main(_alloc_=40/60,_g_=2.25):
 
 
         # Group data into specified periods
-        df['period'] = round_dates(df['date'], period_freq)
+        df['period'] = round_dates(df['date'], Config.period_freq)
         df['log_compute'] = np.log10(df['compute'])
 
         frontier_counts = {}
 
-        for year in fit_years:
+        for year in Config.fit_years:
             year_filtered_df = df[df['date'].dt.year == year]
             frontier_counts[year] = {}
-            for width in threshold_widths:
+            for width in Config.threshold_widths:
                 width_year_counts = 0
                 for idx, period in enumerate(sorted(year_filtered_df['period'].unique())):
                     largest_model = df[df['period'] < period]['compute'].max()  # get largest model before this period
@@ -765,15 +701,15 @@ def main(_alloc_=40/60,_g_=2.25):
                 frontier_counts[year][width] = width_year_counts
 
         # Calculate frontier counts for each percentile
-        sample_frontier_counts = {year: {width: [] for width in threshold_widths} for year in fit_years}
+        sample_frontier_counts = {year: {width: [] for width in Config.threshold_widths} for year in Config.fit_years}
 
         for sim, sim_data in COMPUTE_SAMPLE_DATA.items():
-            for year in fit_years:
+            for year in Config.fit_years:
                 year_data = sim_data[year]
-                year_data['period'] = round_dates(pd.to_datetime(year_data['date']), period_freq)
+                year_data['period'] = round_dates(pd.to_datetime(year_data['date']), Config.period_freq)
                 year_data['log_compute'] = np.log10(year_data['samples'])
                 
-                for width in threshold_widths:
+                for width in Config.threshold_widths:
                     width_year_counts = 0
                     for period in sorted(year_data['period'].unique()):
                         largest_model = max(np.concatenate([np.array(data['samples'])[np.array(data['date']) < period] for data in sim_data.values()]))
@@ -784,29 +720,29 @@ def main(_alloc_=40/60,_g_=2.25):
                     sample_frontier_counts[year][width].append(width_year_counts)
 
         # Calculate percentile counts for each year and width
-        percentile_frontier_counts = {year: {width: {percentile: [] for percentile in CI_percentiles} for width in threshold_widths} for year in fit_years}
-        for year in fit_years:
-            for width in threshold_widths:
-                for percentile in CI_percentiles:
+        percentile_frontier_counts = {year: {width: {percentile: [] for percentile in Config.CI_percentiles} for width in Config.threshold_widths} for year in Config.fit_years}
+        for year in Config.fit_years:
+            for width in Config.threshold_widths:
+                for percentile in Config.CI_percentiles:
                     percentile_count = (np.percentile(sample_frontier_counts[year][width], percentile)).astype(int)
                     percentile_frontier_counts[year][width][percentile] = percentile_count
 
         # Create combined dataframe with observed and retrodicted values
-        combined_df = pd.DataFrame(index=threshold_widths)
+        combined_df = pd.DataFrame(index=Config.threshold_widths)
         combined_df.index.name = 'width'
 
-        for year in fit_years:
-            combined_df[year] = [f"{frontier_counts[year][width]} ({','.join(str(percentile_frontier_counts[year][width][p]) for p in CI_percentiles)})" for width in threshold_widths]
+        for year in Config.fit_years:
+            combined_df[year] = [f"{frontier_counts[year][width]} ({','.join(str(percentile_frontier_counts[year][width][p]) for p in Config.CI_percentiles)})" for width in Config.threshold_widths]
 
         # Calculate differences between observed and retrodicted values
-        difference_df = pd.DataFrame(index=threshold_widths)
+        difference_df = pd.DataFrame(index=Config.threshold_widths)
         difference_df.index.name = 'width'
 
-        for year in fit_years:
+        for year in Config.fit_years:
             differences = []
-            for width in threshold_widths:
+            for width in Config.threshold_widths:
                 obs = frontier_counts[year][width]
-                rets = [percentile_frontier_counts[year][width][p] for p in CI_percentiles]
+                rets = [percentile_frontier_counts[year][width][p] for p in Config.CI_percentiles]
                 differences.append(f"({obs-rets[0]}, {obs-rets[1]}, {obs-rets[2]})")
             difference_df[year] = differences
 
@@ -818,35 +754,35 @@ def main(_alloc_=40/60,_g_=2.25):
 
     if 1: # predictions
 
-        #predictions for absolute thresholds
+        #predictions for absolute Config.thresholds
         ## regular counts
 
-        threshold_counts_all_simulations = {year: {threshold: [] for threshold in thresholds} for year in pred_years.astype(int).ravel()}
+        threshold_counts_all_simulations = {year: {threshold: [] for threshold in Config.thresholds} for year in Config.pred_years.astype(int).ravel()}
 
         # Iterate over each simulation
         for sim in range(len(COMPUTE_SAMPLE_DATA)):
             for year, samples in COMPUTE_SAMPLE_DATA[sim].items():
-                if year in pred_years:
-                    for threshold in thresholds:
+                if year in Config.pred_years:
+                    for threshold in Config.thresholds:
                         count = sum(x >= 10**threshold for x in samples['samples'])
                         threshold_counts_all_simulations[year][threshold].append(count)
 
-        # Calculate counts for each percentile in CI_percentiles
-        threshold_counts_summary = {year: [] for year in pred_years.astype(int).ravel()}
-        for year in pred_years.astype(int).ravel():
-            for threshold in thresholds:
+        # Calculate counts for each percentile in Config.CI_percentiles
+        threshold_counts_summary = {year: [] for year in Config.pred_years.astype(int).ravel()}
+        for year in Config.pred_years.astype(int).ravel():
+            for threshold in Config.thresholds:
                 counts = threshold_counts_all_simulations[year][threshold]
-                percentile_counts = [np.percentile(counts, p) for p in CI_percentiles]
+                percentile_counts = [np.percentile(counts, p) for p in Config.CI_percentiles]
                 threshold_counts_summary[year].append(f"{percentile_counts[1]:.0f} ({percentile_counts[0]:.0f}-{percentile_counts[2]:.0f})")
 
         # Create DataFrames for each percentile
         percentile_dfs = {}
-        for percentile in CI_percentiles:
+        for percentile in Config.CI_percentiles:
             percentile_dfs[percentile] = pd.DataFrame(
                 {year: [int(round(np.percentile(threshold_counts_all_simulations[year][threshold], percentile))) 
-                        for threshold in thresholds] 
-                for year in pred_years.astype(int).ravel()},
-                index=[f'>1e{t}' for t in thresholds]
+                        for threshold in Config.thresholds] 
+                for year in Config.pred_years.astype(int).ravel()},
+                index=[f'>1e{t}' for t in Config.thresholds]
             )
 
         # Make cumulative across years
@@ -859,31 +795,31 @@ def main(_alloc_=40/60,_g_=2.25):
         df_combined_cumulative = pd.DataFrame()
         for year in percentile_dfs_cumulative[50].columns:
             for idx in percentile_dfs_cumulative[50].index:
-                values = [str(percentile_dfs_cumulative[p].loc[idx, year]) for p in CI_percentiles]
+                values = [str(percentile_dfs_cumulative[p].loc[idx, year]) for p in Config.CI_percentiles]
                 df_combined_cumulative.loc[idx, year] = f"[{', '.join(values)}]"
 
         absolute_threshold_predicted = df_combined_cumulative
 
 
 
-        #period_data = pd.date_range(start='2024-01-01', end='2029-01-01', freq=period_freq).strftime('%Y-%m-%d %H:%M:%S').tolist()
+        #period_data = pd.date_range(start='2024-01-01', end='2029-01-01', freq=Config.period_freq).strftime('%Y-%m-%d %H:%M:%S').tolist()
 
-        frontier_counts_all_simulations = {year: {width: [] for width in threshold_widths} for year in pred_years}
+        frontier_counts_all_simulations = {year: {width: [] for width in Config.threshold_widths} for year in Config.pred_years}
 
         for sim in range(len(COMPUTE_SAMPLE_DATA)):
-            for year in pred_years:
+            for year in Config.pred_years:
                 year_data = COMPUTE_SAMPLE_DATA[sim][year]
-                year_data['period'] = round_dates(pd.to_datetime(year_data['date']), period_freq)
+                year_data['period'] = round_dates(pd.to_datetime(year_data['date']), Config.period_freq)
                 year_data['log_compute'] = np.log10(year_data['samples'])
                 
-                for width in threshold_widths:
+                for width in Config.threshold_widths:
                     width_year_counts = 0
                     for period in sorted(year_data['period'].unique()):
                         largest_model = max(np.concatenate([np.array(data['samples'])[np.array(data['date']) < period] for data in COMPUTE_SAMPLE_DATA[sim].values()])) #get largest model until this period
                         period_sample_data = np.array(year_data['samples'])[year_data['period'] == period] #get models released in this period
                         within_threshold_condition = (np.log10(largest_model) - np.log10(period_sample_data) <= width) & (np.log10(largest_model) - np.log10(period_sample_data) > 0) #0 condition makes sure we don't catch models larger than frontier
                         above_frontier_condition  = period_sample_data > largest_model
-                        count = within_threshold_condition.sum() + above_frontier_condition.sum() #how many models released this period within thresholds of largest model seen so far.
+                        count = within_threshold_condition.sum() + above_frontier_condition.sum() #how many models released this period within Config.thresholds of largest model seen so far.
                         width_year_counts += count
                     frontier_counts_all_simulations[year][width].append(width_year_counts)
 
@@ -891,19 +827,19 @@ def main(_alloc_=40/60,_g_=2.25):
 
         # Create DataFrames for each percentile
         frontier_percentile_dfs = {}
-        for percentile in CI_percentiles:
+        for percentile in Config.CI_percentiles:
             frontier_percentile_dfs[percentile] = pd.DataFrame(
                 {year: [int(round(np.percentile(frontier_counts_all_simulations[year][width], percentile)))
-                        for width in threshold_widths]
-                for year in pred_years},
-                index=[f'Within {width} OOM' for width in threshold_widths]
+                        for width in Config.threshold_widths]
+                for year in Config.pred_years},
+                index=[f'Within {width} OOM' for width in Config.threshold_widths]
             )
 
         # Combine into a single DataFrame
         df_frontier_combined = pd.DataFrame()
         for year in frontier_percentile_dfs[50].columns:
             for idx in frontier_percentile_dfs[50].index:
-                values = [str(frontier_percentile_dfs[p].loc[idx, year]) for p in CI_percentiles]
+                values = [str(frontier_percentile_dfs[p].loc[idx, year]) for p in Config.CI_percentiles]
                 df_frontier_combined.loc[idx, year] = f"[{', '.join(values)}]"
 
         frontier_threshold_predicted = df_frontier_combined
@@ -911,23 +847,23 @@ def main(_alloc_=40/60,_g_=2.25):
 
     if 1: #display and save
 
-        if not SAVE_RESULTS:
+        if not Config.SAVE_RESULTS:
             logging.info("Displaying results...\n")
-            logging.info("=== Retrodicted Thresholds ===")
+            logging.info("=== Retrodicted Config.thresholds ===")
             logging.info("=== Absolute Threshold Retrodicted ===")
             display(absolute_threshold_retrodicted)
             #display(absolute_threshold_retrodicted_difference)
             logging.info("=== Frontier Threshold Retrodicted ===")
             display(frontier_threshold_retrodicted)
             #display(frontier_threshold_retrodicted_difference)
-            logging.info("=== Predicted Thresholds ===")
+            logging.info("=== Predicted Config.thresholds ===")
             logging.info("=== Absolute Threshold Predicted ===")
             display(absolute_threshold_predicted)
             logging.info("=== Frontier Threshold Predicted ===")
             display(frontier_threshold_predicted)
         
 
-        if SAVE_RESULTS:
+        if Config.SAVE_RESULTS:
         # Create results directory if it doesn't exist
             if not os.path.exists('results'):
                 os.makedirs('results')
@@ -936,8 +872,8 @@ def main(_alloc_=40/60,_g_=2.25):
             time.sleep(1) #just to get different file names
             current_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             # Save tables to results file
-            with open(f'results/{current_date}_thresholds.csv', 'w') as f:
-                for key, value in SAVE_CONFIG.items():
+            with open(f'results/{Config.save_folder}/{current_date}_threshold_counts.csv', 'w') as f:
+                for key, value in SAVE_Config.items():
                     f.write(f"{key}: {value}\n")
                 f.write("\n")
                 f.write("Absolute Threshold Retrodicted:\n")
@@ -952,4 +888,5 @@ def main(_alloc_=40/60,_g_=2.25):
                 f.write("Frontier Threshold Predicted:\n")
                 frontier_threshold_predicted.to_csv(f,sep='\t')
 
-main()
+
+main(Config)
