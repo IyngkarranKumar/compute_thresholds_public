@@ -116,13 +116,13 @@ def main(_alloc_=40/60,_g_=2.25):
                 2024: 40/60,
                 2025: 30/70,
                 2026: 30/70,
-                2027: 20/80,
+                2027: 30/70,
                 2028: 20/80,
             }
-        g_global_AI_compute_mean=2.25
+        g_global_AI_compute_mean=3.5
         g_AI_workload_share_mean=1.5 #assuming AI_compute_usage/AI_compute_capacity = const - 3.0 gets the two superposed!
         g_total = g_global_AI_compute_mean + g_AI_workload_share_mean
-        g_stdev=0.5 #get more reasonable values by fixing rather than computing from historical data
+        g_stdev=0.0 #get more reasonable values by fixing rather than computing from historical data
 
 
         #allocation fit parameters
@@ -131,20 +131,23 @@ def main(_alloc_=40/60,_g_=2.25):
         constraint_point=(1,1)
         filter_thresholds=1e-20 #ignore models smaller than this
 
-        ##generate sample parameters
-        CONST_FM=True
-        LIN_EXTRAP_FM=False
-        CUSTOM_FM=False
-        if CUSTOM_FM:
-            custom_fm_grad=1.0 #it would be nicer to set c
-        assert(CONST_FM+LIN_EXTRAP_FM+CUSTOM_FM)==1, "Only one of CONST_FM, LIN_EXTRAP_FM, or CUSTOM_FM can be True"
+        ##SAMPLING PARAMETERS
+        ALLOC_FIT_TYPE='cumulative' #[cumulative, categorical]
+        POINT_CUM_ALLOC_PARAMS=False #takes mean of historical datas
+        DISTRIBUTION_CUM_ALLOC_PARAMS=True
+        grad_cum_alloc_min, grad_cum_alloc_max = 1.0, 1.0 #for setting up uncertainty modelling
+        assert(POINT_CUM_ALLOC_PARAMS+DISTRIBUTION_CUM_ALLOC_PARAMS)==1, "Only one of DEFAULT_CUM_ALLOC_PARAMS or CUSTOM_CUM_ALLOC_PARAMS can be True"
 
         #IMPORTANT PARAMETER - largest model share
         LMS_SAMPLING="uniform"
-        min_norm_m = 10**-7
-        largest_model_share_mean,lms_stddev,min_lms,max_lms=0.3, 0.1,0.05,0.5 #I want 0.05 and 0.5 as min and max
+        assert LMS_SAMPLING in ['gaussian', 'uniform']
+        largest_model_share_mean,lms_stddev,min_lms,max_lms=0.3, 0.1,0.05,0.50
 
-        n_catgs = 50
+        #min m sampling
+        min_norm_m_min,min_norm_m_max = 1e-8, 1e-6 #wacky variable names
+
+        #n_catg setting (higher the better, up to the point where delta M gets too small)
+        n_catgs = 20
 
 
         #threshold counting PARAMETERS
@@ -154,10 +157,6 @@ def main(_alloc_=40/60,_g_=2.25):
         period_freq = '3M'  # frequency for doing frontier counts
         CI_percentiles=[10,50,90]
 
-
-        #function parameters
-        fixed_alloc=40/60
-        g_global_AI_compute_mean=4.0
 
 
         #SAVE CONFIG
@@ -171,15 +170,20 @@ def main(_alloc_=40/60,_g_=2.25):
                 "g_AI_workload_share_mean": g_AI_workload_share_mean,
                 "g_stdev": g_stdev
             },
-            "frontier model parameters": {
-                "type": "constant" if CONST_FM else "linear_extrap" if LIN_EXTRAP_FM else "custom",
-                "custom_fm_grad": custom_fm_grad if CUSTOM_FM else None,
+            "sampling parameters": {
+                "alloc_fit_type": ALLOC_FIT_TYPE,
+                "point_cum_alloc_params": POINT_CUM_ALLOC_PARAMS,
+                "distribution_cum_alloc_params": DISTRIBUTION_CUM_ALLOC_PARAMS,
+                "grad_cum_alloc_range": [grad_cum_alloc_min, grad_cum_alloc_max],
                 "lms_sampling": LMS_SAMPLING,
-                "min_norm_m": min_norm_m,
-                "lms_mean": largest_model_share_mean,
-                "lms_stddev": lms_stddev,
-                "min_lms": min_lms,
-                "max_lms": max_lms
+                "largest_model_share": {
+                    "mean": largest_model_share_mean,
+                    "stddev": lms_stddev,
+                    "min": min_lms,
+                    "max": max_lms
+                },
+                "min_norm_m_range": [min_norm_m_min, min_norm_m_max],
+                "n_catgs": n_catgs
             },
             "model categories": n_catgs,
             "threshold parameters": {
@@ -211,9 +215,8 @@ def main(_alloc_=40/60,_g_=2.25):
         df = df[["model", "compute", "date", "cost","year"]]
 
         # Models to remove
-        to_remove = ["AlphaGo Zero", "AlphaZero"]
+        to_remove = ["AlphaGo Zero", "AlphaZero"] #historial outliers
         df = df[~df["model"].isin(to_remove)]
-
 
 
         # Print stats for full dataset
@@ -304,7 +307,6 @@ def main(_alloc_=40/60,_g_=2.25):
             log_aggregate_compute=np.log10(aggregate_compute)
 
             recent_years = log_aggregate_compute[log_aggregate_compute.index.isin(range(2020,df.year.max()+1))]
-            recent_log_compute_dict = {int(k): v for k, v in recent_years.items()}
 
 
             if 1: #do historical data
@@ -317,7 +319,8 @@ def main(_alloc_=40/60,_g_=2.25):
 
                 AI_compute_usage={}
                 for idx,year in enumerate(range(2024, 2029)):
-                    AI_compute_usage[year] = total_usage_2023 * (g_total+np.random.normal(0,g_stdev)) ** (idx + 1)
+                    growth_rate = g_total+np.random.normal(0,g_stdev)
+                    AI_compute_usage[year] = ((growth_rate) ** (idx + 1))*total_usage_2023 
 
                 log_aggregate_compute_predictions_dict = {year: np.log10(compute) for year, compute in AI_compute_usage.items()}
                 LOG_AGGREGATE_COMPUTE_DATA[sim]['Total-method 2027'] = log_aggregate_compute_predictions_dict
@@ -391,7 +394,6 @@ def main(_alloc_=40/60,_g_=2.25):
             plt.figure(figsize=(10, 6))
 
             years = sorted(pred_alloc_dict.keys())
-            alloc_ratios = [pred_alloc_dict[y] for y in years]
 
             train_allocs = []
             inference_allocs = []
@@ -414,7 +416,6 @@ def main(_alloc_=40/60,_g_=2.25):
             plt.xticks(years)
 
 
-
     if 1: #fit allocations 
         FIT_DATA={year:None for year in fit_years}
 
@@ -424,7 +425,6 @@ def main(_alloc_=40/60,_g_=2.25):
         for idx,year in enumerate(fit_years):
             total_compute=aggregate_compute[aggregate_compute.index==year].values
             datapoints_year=df[df['date'].dt.year==year]['compute']
-            mean_log_compute=np.log10(datapoints_year).mean()
             largest_model=datapoints_year.max()
             smallest_model=datapoints_year.min()
             norm_factor_total=total_compute[0]
@@ -496,84 +496,87 @@ def main(_alloc_=40/60,_g_=2.25):
             
     if 1: #Generate compute samples
 
-
         all_years=np.concatenate([fit_years, pred_years.astype(int).ravel()])
         COMPUTE_SAMPLE_DATA = {sim: {int(year): {} for year in all_years} for sim in range(n_simulations)} #init data structure 
 
         for sim in range(n_simulations):
 
-            #build in sampling
-            assert LMS_SAMPLING in ["uniform", "normal"]
-            if LMS_SAMPLING=="uniform":
-                norm_largest_model = np.random.uniform(min_lms,max_lms)
-            elif LMS_SAMPLING=="normal":
-                norm_largest_model = truncated_normal(mean=largest_model_share_mean,std_dev=lms_stddev,min=min_lms,max=max_lms, size=1)[0]
-            else:
-                raise ValueError(f"Invalid LMS_SAMPLING: {LMS_SAMPLING}")
-
-
             for year in all_years:
-
                 #get total compute
                 if year in fit_years:
                     log_agg_training_compute = LOG_AGGREGATE_COMPUTE_DATA[sim]["historical aggregate training compute"][year]
                 if year in pred_years:
                     log_agg_training_compute = LOG_AGGREGATE_COMPUTE_DATA[sim]["aggregate training compute"][year]
-                agg_training_compute = 10**log_agg_training_compute  # total compute used over the year
+                agg_training_compute = 10**log_agg_training_compute 
 
                 #set largest model that year 
-                if year in fit_years: #remove this eventually
-                    largest_model = norm_largest_model * agg_training_compute
-                else:
-                    largest_model = norm_largest_model * agg_training_compute
+                if LMS_SAMPLING=='gaussian':
+                    norm_largest_model = truncated_normal(mean=largest_model_share_mean,std_dev=lms_stddev,min_lms=min_lms,max_lms=max_lms, size=1)[0]
+                elif LMS_SAMPLING=='uniform':
+                    norm_largest_model = np.random.uniform(min_lms, max_lms)
 
+                largest_model = norm_largest_model * agg_training_compute
+                assert largest_model <= 0.5*agg_training_compute, print(f"Year: {year}, Largest Model: {largest_model}, Total Training Compute: {agg_training_compute}")
 
-
-
-                logging.info(f"Ratio of largest model to aggregate training compute for year {year}: {largest_model / agg_training_compute}")
+                #sample smallest model that year
+                min_norm_m = 10**(np.random.uniform(np.log10(min_norm_m_min),np.log10(min_norm_m_max)))
 
                 # model sizes (as fraction of largest_model)
                 norm_ms = np.logspace(np.log10(min_norm_m), np.log10(1.0), num=n_catgs)
                 log_norm_ms = np.log10(norm_ms)
 
-                if CONST_FM:
-                    fm_grad, fm_int = np.mean([FIT_DATA[year]['cum_alloc_fits'][0] for year in FIT_DATA]), np.mean([FIT_DATA[year]['cum_alloc_fits'][1] for year in FIT_DATA])
-                elif LIN_EXTRAP_FM:
-                    raise NotImplementedError("Linear extrapolation of fm_grad and fm_int not implemented")
-                elif CUSTOM_FM:
-                    fm_grad = custom_fm_grad
-                if year in FIT_DATA.keys():
-                    fm_grad, fm_int = FIT_DATA[year]['cum_alloc_fits']
 
-                log_frac_cum_compute = fm_grad * log_norm_ms + fm_int
-                frac_cum_compute = 10**log_frac_cum_compute
-                assert np.round(np.sum(np.diff(frac_cum_compute)), 5) == 1.0  # allocations should sum to 1
+                assert ALLOC_FIT_TYPE in ['cumulative','categorical']
+                #generate compute bin allocations (catg_alloc)
+                if ALLOC_FIT_TYPE=='cumulative':
+                    assert(POINT_CUM_ALLOC_PARAMS+DISTRIBUTION_CUM_ALLOC_PARAMS)==1, "Only one of DEFAULT_CUM_ALLOC_PARAMS or CUSTOM_CUM_ALLOC_PARAMS can be True"
+                    if POINT_CUM_ALLOC_PARAMS:
+                        grad_cum_alloc = np.mean([FIT_DATA[year]['cum_alloc_fits'][0] for year in FIT_DATA.keys()])
+                        int_cum_alloc = np.mean([FIT_DATA[year]['cum_alloc_fits'][1] for year in FIT_DATA.keys()])
+                    elif DISTRIBUTION_CUM_ALLOC_PARAMS:
+                        grad_cum_alloc, int_cum_alloc = np.random.uniform(grad_cum_alloc_min,grad_cum_alloc_max), 0
+                    else:
+                        raise ValueError("Invalid choice of cumulative alloc params")
 
-                if year == 2024:
-                    for idx, frac_alloc in enumerate(np.diff(frac_cum_compute)):
-                        logging.debug(f"models {norm_ms[idx]} - {norm_ms[idx+1]} alloc: {frac_alloc}")
 
-                model_ctgs = [f'{norm_ms[i]:.2e}--{norm_ms[i+1]:.2e}' for i in range(len(norm_ms) - 1)]
-                f_m = np.diff(frac_cum_compute)  # we don't include compute alloc to models 1e-8 smaller than total compute
-                bin_compute_allocs = f_m * agg_training_compute  # array of how much compute allocated to each bin
-                DATA_alloc = {model_ctgs[i]: {'compute alloc': bin_compute_allocs[i]} for i in range(len(model_ctgs))}
+                    log_cum_alloc = grad_cum_alloc*log_norm_ms + int_cum_alloc
+                    cum_alloc = 10**log_cum_alloc
+                    catg_alloc = np.diff(cum_alloc)
+                    assert abs(np.sum(catg_alloc) - 1) < 1e-5, f"Sum of category allocations {np.sum(catg_alloc)} not equal to 1"
+
+                    residual_catg_alloc = 1-np.sum(catg_alloc)
+                    catg_alloc = np.concatenate(([residual_catg_alloc],catg_alloc))
+
+
+                absl_ms = norm_ms*largest_model
+                absl_model_catgs = [(absl_ms[i], absl_ms[i+1]) for i in range(len(absl_ms) - 1)]
+                absl_model_catgs = [(min_norm_m*largest_model,min_norm_m*largest_model)] + absl_model_catgs
+                absl_allocs = catg_alloc * agg_training_compute
+                alloc_ub_check_var = [ctg[-1] for ctg in absl_model_catgs] < absl_allocs
+                assert(np.all(alloc_ub_check_var)), print(f'{(~alloc_ub_check_var).sum()/len(alloc_ub_check_var)*100} of alloc-ctg pairs exceed ctg_ub')
+
+                model_ctgs = [(norm_ms[i], norm_ms[i+1]) for i in range(len(norm_ms) - 1)]
+                model_ctgs = [(min_norm_m,min_norm_m)] + model_ctgs #for first ctg bin - we sample just the smallest model
+                ctgs_lbs, ctgs_ubs =[ctg[0] for ctg in model_ctgs], [ctg[-1] for ctg in model_ctgs] #useful vars
+
+                bin_compute_allocs = catg_alloc * agg_training_compute  # array of how much compute allocated to each bin
 
                 compute_samples_rand = []
 
+                #draw samples
                 for idx, (ctg, alloc) in enumerate(list(zip(model_ctgs, bin_compute_allocs))):
-                    # here alloc is the amount of alloc given to each individual bin
-                    bounds = ctg.split('--')
+                    if idx==0: continue #skip first bin
+                
+
+                    # set bounds
+                    bounds = ctg
                     norm_model_bin_lb, norm_model_bin_ub = float(bounds[0]), float(bounds[1])
                     model_bin_lb, model_bin_ub = largest_model * norm_model_bin_lb, largest_model * norm_model_bin_ub  # normalising factor is total training compute
+                    assert alloc > model_bin_ub
+                    if alloc==0:  # skip bins which have no compute allocated to them - occurs when allocation gradient large 
+                        continue 
 
-                    if alloc > model_bin_ub:
-                        pass  # do nothing; we're good
-                    else:
-                        capped_model_bin_ub = alloc  # cap the ub at the alloc
-                        model_bin_ub = capped_model_bin_ub
-                        logging.info(f"alloc: {alloc} < model_bin_ub: {model_bin_ub}. Capping model_bin_ub at alloc.")
-
-                    # not generating multiple samples yet for CIs
+                    #perform sampling 
                     allocnorm_model_bin_lb, allocnorm_model_bin_ub = model_bin_lb / alloc, model_bin_ub / alloc  # this is purely just for sampling; no physical meaning
                     running_tot = 0
                     allocnormed_samples = []
@@ -581,6 +584,8 @@ def main(_alloc_=40/60,_g_=2.25):
                         # SAMPLE
                         sample = np.random.uniform(allocnorm_model_bin_lb, allocnorm_model_bin_ub)
                         sample = float(sample) if isinstance(sample, np.ndarray) else sample
+                        assert sample <= 1 #sample should be smaller than alloc OR equal to it
+
 
                         # SUM CHECK
                         if running_tot + sample > 1:
@@ -590,9 +595,13 @@ def main(_alloc_=40/60,_g_=2.25):
                             allocnormed_samples.append(sample)
                             running_tot += sample
 
-                    compute_samples_rand = compute_samples_rand + (list(alloc * np.array(allocnormed_samples)))
+                    bin_samples = alloc*np.array(allocnormed_samples) # un-normalise
+                    compute_samples_rand = compute_samples_rand + (list(bin_samples)) #add to sample list
+
+                    #print(f"Number of samples drawn for model category: {len(allocnormed_samples)}")
 
                 compute_samples_rand = [x for x in compute_samples_rand if x != 0]
+                #print(f"Samples drawn for sim {sim}, year {year}: {len(compute_samples_rand)}")
 
                 COMPUTE_SAMPLE_DATA[sim][year]['samples'] = compute_samples_rand
                 COMPUTE_SAMPLE_DATA[sim][year]['date'] = [decimal_year_to_date(year + np.random.random()) for _ in compute_samples_rand]  # convert to standard pd datetime format
@@ -603,7 +612,6 @@ def main(_alloc_=40/60,_g_=2.25):
         for year in pred_years.ravel():
             logging.debug(f"{year}: {len(COMPUTE_SAMPLE_DATA[0][year]['samples'])} samples") #take first sim
 
-                
 
         if GENERATED_SAMPLE_PLOTS:
             fig, axes = plt.subplots(3, 2, figsize=(12, 8))
@@ -643,11 +651,16 @@ def main(_alloc_=40/60,_g_=2.25):
         if GENERATED_SAMPLE_PLOTS:
             ylims = (14, 30)
             plt.figure(figsize=(12, 6))
-            plt.scatter(df[df['year'].isin(fit_years)]['date'], np.log10(df[df['year'].isin(fit_years)]['compute']), alpha=0.5, label='Historical')
             
-            for year in pred_years:
-                sample_data = COMPUTE_SAMPLE_DATA[0][year]
-                plt.scatter(sample_data['date'], np.log10(sample_data['samples']), alpha=0.5, label='Projected Samples' if year == pred_years[0] else "", color='red')
+            for year in all_years:
+                if year in fit_years:
+                    sample_data = COMPUTE_SAMPLE_DATA[0][year]
+                    plt.scatter(sample_data['date'], np.log10(sample_data['samples']), alpha=0.2, color='blue', label='Retrodicted Samples' if year == fit_years[0] else "",marker='x')
+                if year in pred_years:
+                    sample_data = COMPUTE_SAMPLE_DATA[0][year]
+                    plt.scatter(sample_data['date'], np.log10(sample_data['samples']), alpha=0.5, label='Projected Samples' if year == pred_years[0] else "", color='red')
+
+            plt.scatter(df[df['year'].isin(fit_years)]['date'], np.log10(df[df['year'].isin(fit_years)]['compute']), alpha=1.0, label='Historical',marker='x')
 
             plt.xlabel('Year')
             plt.ylabel('Log Compute (FLOPs)')
@@ -801,7 +814,6 @@ def main(_alloc_=40/60,_g_=2.25):
 
         frontier_threshold_retrodicted = combined_df
         frontier_threshold_retrodicted_difference = difference_df
-
 
 
     if 1: # predictions
