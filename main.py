@@ -435,7 +435,7 @@ def main(Config):
         all_years=np.concatenate([Config.fit_years, Config.pred_years.astype(int).ravel()])
         COMPUTE_SAMPLE_DATA = {sim: {int(year): {} for year in all_years} for sim in range(Config.n_simulations)} #init data structure 
 
-        for sim in range(Config.n_simulations):
+        for sim in range(n_simulations):
 
             for year in all_years:
                 #get total compute
@@ -463,9 +463,11 @@ def main(Config):
 
 
                 assert Config.ALLOC_FIT_TYPE in ['cumulative','categorical']
-                #generate compute bin allocations (catg_alloc)
-                if Config.ALLOC_FIT_TYPE=='cumulative':
-                    assert(Config.POINT_CUM_ALLOC_PARAMS+Config.DISTRIBUTION_CUM_ALLOC_PARAMS)==1, "Only one of DEFAULT_CUM_ALLOC_PARAMS or CUSTOM_CUM_ALLOC_PARAMS can be True"
+
+                #generate a valid compute bin allocations (catg_alloc)
+
+                VALID_ALLOCATION=False
+                while not VALID_ALLOCATION:
                     if Config.POINT_CUM_ALLOC_PARAMS:
                         grad_cum_alloc = np.mean([FIT_DATA[year]['cum_alloc_fits'][0] for year in FIT_DATA.keys()])
                         int_cum_alloc = np.mean([FIT_DATA[year]['cum_alloc_fits'][1] for year in FIT_DATA.keys()])
@@ -474,22 +476,29 @@ def main(Config):
                     else:
                         raise ValueError("Invalid choice of cumulative alloc params")
 
-
                     log_cum_alloc = grad_cum_alloc*log_norm_ms + int_cum_alloc
                     cum_alloc = 10**log_cum_alloc
                     catg_alloc = np.diff(cum_alloc)
-                    assert abs(np.sum(catg_alloc) - 1) < 1e-5, f"Sum of category allocations {np.sum(catg_alloc)} not equal to 1"
+                    sum_condition = abs(np.sum(catg_alloc) - 1) < 1e-5
+                    assert sum_condition, f"Sum of category allocations {np.sum(catg_alloc)} not equal to 1" #stop code if not equal to 1
 
                     residual_catg_alloc = 1-np.sum(catg_alloc)
                     catg_alloc = np.concatenate(([residual_catg_alloc],catg_alloc))
 
+                    absl_ms = norm_ms*largest_model
+                    absl_model_catgs = [(absl_ms[i], absl_ms[i+1]) for i in range(len(absl_ms) - 1)]
+                    absl_model_catgs = [(min_norm_m*largest_model,min_norm_m*largest_model)] + absl_model_catgs
+                    absl_allocs = catg_alloc * agg_training_compute
+                    alloc_ub_check_var = [ctg[-1] for ctg in absl_model_catgs] < absl_allocs
+                    alloc_ub_condition = np.all(alloc_ub_check_var) #ensure all allocs are above the ctg_ub
+                    #assert(alloc_ub_condition), print(f'{(~alloc_ub_check_var).sum()/len(alloc_ub_check_var)*100} of alloc-ctg pairs exceed ctg_ub')
 
-                absl_ms = norm_ms*largest_model
-                absl_model_catgs = [(absl_ms[i], absl_ms[i+1]) for i in range(len(absl_ms) - 1)]
-                absl_model_catgs = [(min_norm_m*largest_model,min_norm_m*largest_model)] + absl_model_catgs
-                absl_allocs = catg_alloc * agg_training_compute
-                alloc_ub_check_var = [ctg[-1] for ctg in absl_model_catgs] < absl_allocs
-                assert(np.all(alloc_ub_check_var)), print(f'{(~alloc_ub_check_var).sum()/len(alloc_ub_check_var)*100} of alloc-ctg pairs exceed ctg_ub')
+                    if alloc_ub_condition: 
+                        VALID_ALLOCATION=True
+                    else:
+                        VALID_ALLOCATION=False
+                        #print(f'{(~alloc_ub_check_var).sum()/len(alloc_ub_check_var)*100} of alloc-ctg pairs exceed ctg_ub')
+                        #print(f"Invalid allocation for year {year}, gradient: {grad_cum_alloc}")
 
                 model_ctgs = [(norm_ms[i], norm_ms[i+1]) for i in range(len(norm_ms) - 1)]
                 model_ctgs = [(min_norm_m,min_norm_m)] + model_ctgs #for first ctg bin - we sample just the smallest model
@@ -499,12 +508,12 @@ def main(Config):
 
                 compute_samples_rand = []
 
-                #draw samples
+                #draw samples from valid bin allocations
                 for idx, (ctg, alloc) in enumerate(list(zip(model_ctgs, bin_compute_allocs))):
-                    if idx==0: continue #skip first bin
-                
+                    if idx==0: continue
+                    
 
-                    # set bounds
+                    # set initial bounds
                     bounds = ctg
                     norm_model_bin_lb, norm_model_bin_ub = float(bounds[0]), float(bounds[1])
                     model_bin_lb, model_bin_ub = largest_model * norm_model_bin_lb, largest_model * norm_model_bin_ub  # normalising factor is total training compute
@@ -521,7 +530,6 @@ def main(Config):
                         sample = np.random.uniform(allocnorm_model_bin_lb, allocnorm_model_bin_ub)
                         sample = float(sample) if isinstance(sample, np.ndarray) else sample
                         assert sample <= 1 #sample should be smaller than alloc OR equal to it
-
 
                         # SUM CHECK
                         if running_tot + sample > 1:
