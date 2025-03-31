@@ -229,10 +229,8 @@ def main(Config):
 
     if 1: #Training compute extrapolation
                 
-
         ###DATA STRUCTURE INIT
         LOG_AGGREGATE_COMPUTE_DATA={}
-
 
 
         for sim in range(Config.n_simulations):
@@ -242,7 +240,8 @@ def main(Config):
             aggregate_compute=year_grouped_df['compute'].sum()
             log_aggregate_compute=np.log10(aggregate_compute)
 
-            recent_years = log_aggregate_compute[log_aggregate_compute.index.isin(range(2020,df.year.max()+1))]
+            recent_years = log_aggregate_compute[log_aggregate_compute.index.isin(Config.fit_years)]
+            recent_log_compute_dict = {int(k): v for k, v in recent_years.items()}
 
 
             if 1: #do historical data
@@ -250,13 +249,13 @@ def main(Config):
                 LOG_AGGREGATE_COMPUTE_DATA[sim]['historical aggregate total compute'] = {int(k): v+np.log10(Config.hist_alloc_multiplier) for k, v in log_aggregate_compute.items()}
 
             if Config.AI2027_EXTRAP:
-                training_usage_2023 = 10**log_aggregate_compute.get(2023)
-                total_usage_2023 = 2 * training_usage_2023
+                previous_year_training_usage = 10**log_aggregate_compute.get(Config.fit_years[-1])
+                total_usage_previous_year = Config.hist_alloc_multiplier * previous_year_training_usage
 
                 AI_compute_usage={}
+                sim_noise_term=np.random.normal(0,Config.g_stdev) #set noise term for each sim 
                 for idx,year in enumerate(Config.pred_years):
-                    growth_rate = Config.g_total+np.random.normal(0,Config.g_stdev)
-                    AI_compute_usage[year] = ((growth_rate) ** (idx + 1))*total_usage_2023 
+                    AI_compute_usage[year] = total_usage_previous_year * (Config.g_total+sim_noise_term) ** (idx + 1)
 
                 log_aggregate_compute_predictions_dict = {year: np.log10(compute) for year, compute in AI_compute_usage.items()}
                 LOG_AGGREGATE_COMPUTE_DATA[sim]['Total-method 2027'] = log_aggregate_compute_predictions_dict
@@ -435,7 +434,7 @@ def main(Config):
         all_years=np.concatenate([Config.fit_years, Config.pred_years.astype(int).ravel()])
         COMPUTE_SAMPLE_DATA = {sim: {int(year): {} for year in all_years} for sim in range(Config.n_simulations)} #init data structure 
 
-        for sim in range(n_simulations):
+        for sim in range(Config.n_simulations):
 
             for year in all_years:
                 #get total compute
