@@ -48,12 +48,6 @@ def main(Config):
 
     if 1: #UTILS
 
-        #util funcs cell
-        def norm_exp_func(x,a,b,k):
-            norm_factor=(1/k)*(np.exp(k*b)-np.exp(k*a))
-            return (1/norm_factor)*np.exp(k*x)
-
-
         def decimal_year_to_date(decimal_year):
             if isinstance(decimal_year, pd.Series):
                 return decimal_year.apply(lambda x: decimal_year_to_date(x))
@@ -104,6 +98,7 @@ def main(Config):
             "growth parameters": {
                 "Config.g_global_AI_compute_mean": Config.g_global_AI_compute_mean,
                 "Config.g_AI_workload_share_mean": Config.g_AI_workload_share_mean,
+                "Config.g_total": Config.g_total,
                 "Config.g_stdev": Config.g_stdev
             },
             "sampling parameters": {
@@ -241,8 +236,6 @@ def main(Config):
             log_aggregate_compute=np.log10(aggregate_compute)
 
             recent_years = log_aggregate_compute[log_aggregate_compute.index.isin(Config.fit_years)]
-            recent_log_compute_dict = {int(k): v for k, v in recent_years.items()}
-
 
             if 1: #do historical data
                 LOG_AGGREGATE_COMPUTE_DATA[sim]['historical aggregate training compute'] = {int(k): v for k, v in log_aggregate_compute.items()}
@@ -872,14 +865,14 @@ def main(Config):
 
         if Config.SAVE_RESULTS:
         # Create results directory if it doesn't exist
-            if not os.path.exists('results'):
-                os.makedirs('results')
+            if not os.path.exists(Config.save_folder):
+                os.makedirs(Config.save_folder)
 
             # Get current date
             time.sleep(1) #just to get different file names
             current_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             # Save tables to results file
-            with open(f'results/{Config.save_folder}/{current_date}_threshold_counts.csv', 'w') as f:
+            with open(f'{Config.save_folder}/{current_date}_threshold_counts.csv', 'w') as f:
                 for key, value in SAVE_Config.items():
                     f.write(f"{key}: {value}\n")
                 f.write("\n")

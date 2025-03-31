@@ -7,7 +7,7 @@ class Config:
     TRAINING_COMPUTE_PLOTS=False
     FIT_ALLOCATION_PLOTS=False
     GENERATED_SAMPLE_PLOTS=False
-    SAVE_RESULTS,save_folder=False, 'results/test_save_folder'
+    SAVE_RESULTS,save_folder=True, 'results/test_save_folder'
 
     #sampling parameters
     n_simulations = 100 #for bootstrappng, sampling parameters etc. n_simulations = 10 #for bootstrappng, sampling parameters etc. 
@@ -18,7 +18,7 @@ class Config:
     hist_alloc=40/60
     hist_alloc_multiplier=1+(1/hist_alloc)
     FIXED_ALLOCATION=True
-    fixed_alloc=40/60
+    fixed_alloc=70/30
     DYNAMIC_ALLOCATION=False #inference scaling continues improving
     assert(FIXED_ALLOCATION+DYNAMIC_ALLOCATION)==1
     pred_alloc_dict = {
@@ -29,9 +29,9 @@ class Config:
             2028: 30/70,
         }
     g_global_AI_compute_mean=2.25
-    g_AI_workload_share_mean=1.5 #assuming AI_compute_usage/AI_compute_capacity = const - 3.0 gets the two superposed!
+    g_AI_workload_share_mean=1.25 
     g_total = g_global_AI_compute_mean + g_AI_workload_share_mean
-    g_stdev=0.5 #get more reasonable values by fixing rather than computing from historical data
+    g_stdev=0.5
 
 
     #allocation fit parameters
