@@ -442,6 +442,8 @@ def main(Config):
                     norm_largest_model = truncated_normal(mean=Config.largest_model_share_mean,std_dev=Config.lms_stddev,min_lms=Config.min_lms,max_lms=Config.max_lms, size=1)[0]
                 elif Config.LMS_SAMPLING=='uniform':
                     norm_largest_model = np.random.uniform(Config.min_lms, Config.max_lms)
+                if year==2024 and Config.SET_2024_LMS: #2024 set
+                    norm_largest_model=0.1
 
                 largest_model = norm_largest_model * agg_training_compute
                 assert largest_model <= 0.5*agg_training_compute, print(f"Year: {year}, Largest Model: {largest_model}, Total Training Compute: {agg_training_compute}")

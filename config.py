@@ -7,7 +7,7 @@ class Config:
     TRAINING_COMPUTE_PLOTS=False
     FIT_ALLOCATION_PLOTS=False
     GENERATED_SAMPLE_PLOTS=False
-    SAVE_RESULTS,save_folder=True, 'results/test_save_folder'
+    SAVE_RESULTS,save_folder=False, 'results/test_save_folder'
 
     #sampling parameters
     n_simulations = 100 #for bootstrappng, sampling parameters etc. n_simulations = 10 #for bootstrappng, sampling parameters etc. 
@@ -15,7 +15,7 @@ class Config:
     #training compute extrapolation config 
     AI2027_EXTRAP=True
     method_choice="method 2027" #['linear extrapolation', 'method 2027']
-    hist_alloc=40/60
+    hist_alloc=70/30
     hist_alloc_multiplier=1+(1/hist_alloc)
     FIXED_ALLOCATION=True
     fixed_alloc=70/30
@@ -29,7 +29,7 @@ class Config:
             2028: 30/70,
         }
     g_global_AI_compute_mean=2.25
-    g_AI_workload_share_mean=1.25 
+    g_AI_workload_share_mean=1.4 
     g_total = g_global_AI_compute_mean + g_AI_workload_share_mean
     g_stdev=0.5
 
@@ -51,6 +51,8 @@ class Config:
     LMS_SAMPLING="uniform"
     assert LMS_SAMPLING in ['gaussian', 'uniform']
     largest_model_share_mean,lms_stddev,min_lms,max_lms=0.3, 0.1,0.10,0.50
+    SET_2024_LMS=True
+
 
     #min m sampling
     min_norm_m_min,min_norm_m_max = 1e-8, 1e-6 #wacky variable names
