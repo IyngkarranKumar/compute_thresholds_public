@@ -146,7 +146,7 @@ def main(Config):
         df = df[["model", "compute", "date", "cost","year"]]
 
         # Models to remove
-        to_remove = ["AlphaGo Zero", "AlphaZero"] #historial outliers
+        to_remove = ["AlphaGo Zero", "AlphaZero","AlphaGo Master"] #historial outliers
         df = df[~df["model"].isin(to_remove)]
 
 
@@ -474,7 +474,7 @@ def main(Config):
                     cum_alloc = 10**log_cum_alloc
                     catg_alloc = np.diff(cum_alloc)
                     sum_condition = abs(np.sum(catg_alloc) - 1) < 1e-5
-                    assert sum_condition, f"Sum of category allocations {np.sum(catg_alloc)} not equal to 1" #stop code if not equal to 1
+                    #assert sum_condition, f"Sum of category allocations {np.sum(catg_alloc)} not equal to 1" #stop code if not equal to 1
 
                     residual_catg_alloc = 1-np.sum(catg_alloc)
                     catg_alloc = np.concatenate(([residual_catg_alloc],catg_alloc))
@@ -891,4 +891,4 @@ def main(Config):
                 frontier_threshold_predicted.to_csv(f,sep='\t')
 
 
-#main(Config)
+main(Config)

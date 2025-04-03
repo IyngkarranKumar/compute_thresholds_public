@@ -17,20 +17,20 @@ class Config:
     method_choice="method 2027" #['linear extrapolation', 'method 2027']
     hist_alloc=70/30
     hist_alloc_multiplier=1+(1/hist_alloc)
-    FIXED_ALLOCATION=True
+    FIXED_ALLOCATION=False
     fixed_alloc=70/30
-    DYNAMIC_ALLOCATION=False #inference scaling continues improving
+    DYNAMIC_ALLOCATION=True #inference scaling continues improving
     assert(FIXED_ALLOCATION+DYNAMIC_ALLOCATION)==1
     pred_alloc_dict = {
-            2024: 40/60,
-            2025: 30/70,
-            2026: 30/70,
-            2027: 30/70,
-            2028: 30/70,
+            2024: 90/10,
+            2025: 90/10,
+            2026: 70/30,
+            2027: 70/30,
+            2028: 70/30,
         }
     g_global_AI_compute_mean=2.25
     g_AI_workload_share_mean=1.4 
-    g_total = g_global_AI_compute_mean + g_AI_workload_share_mean
+    g_total = g_global_AI_compute_mean*g_AI_workload_share_mean
     g_stdev=0.5
 
 
@@ -44,13 +44,13 @@ class Config:
     ALLOC_FIT_TYPE='cumulative' #[cumulative, categorical]
     POINT_CUM_ALLOC_PARAMS=False #takes mean of historical datas
     DISTRIBUTION_CUM_ALLOC_PARAMS=True
-    grad_cum_alloc_min, grad_cum_alloc_max = 0.9, 1.1 #for setting up uncertainty modelling
+    grad_cum_alloc_min, grad_cum_alloc_max = 0.9,1.1
     assert(POINT_CUM_ALLOC_PARAMS+DISTRIBUTION_CUM_ALLOC_PARAMS)==1, "Only one of DEFAULT_CUM_ALLOC_PARAMS or CUSTOM_CUM_ALLOC_PARAMS can be True"
 
     #IMPORTANT PARAMETER - largest model share
     LMS_SAMPLING="uniform"
     assert LMS_SAMPLING in ['gaussian', 'uniform']
-    largest_model_share_mean,lms_stddev,min_lms,max_lms=0.3, 0.1,0.10,0.50
+    largest_model_share_mean,lms_stddev,min_lms,max_lms=0.3, 0.1,0.05,0.50
     SET_2024_LMS=True
 
 
@@ -66,4 +66,4 @@ class Config:
     retrodict_thresholds=[23, 24, 25]
     threshold_widths = [0.5, 1, 1.5]  # List of threshold widths to analyze
     period_freq = '3M'  # frequency for doing frontier counts
-    CI_percentiles=[10,50,90]
+    CI_percentiles=[5,50,95]
