@@ -54,7 +54,7 @@ class Config:
     LMS_SAMPLING="uniform"
     assert LMS_SAMPLING in ['gaussian', 'uniform']
     largest_model_share_mean,lms_stddev,min_lms,max_lms=0.3, 0.1,0.05,0.50
-    SET_2024_LMS=False
+    SET_2024_LMS=True
 
 
     #min m sampling
@@ -69,4 +69,4 @@ class Config:
     retrodict_thresholds=[23, 24, 25]
     threshold_widths = [0.5, 1, 1.5]  # List of threshold widths to analyze
     period_freq = '3M'  # frequency for doing frontier counts
-    CI_percentiles=[10,50,90]
+    CI_percentiles=[5,50,95]
