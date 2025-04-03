@@ -91,38 +91,62 @@ def main(Config):
 
         #SAVE Config
         SAVE_Config={
-            "historical allocation": Config.hist_alloc,
-            "allocation type": "fixed" if Config.FIXED_ALLOCATION else "dynamic",
-            "fixed allocation": Config.fixed_alloc if Config.FIXED_ALLOCATION else None,
-            "predicted allocations": Config.pred_alloc_dict if Config.DYNAMIC_ALLOCATION else None,
-            "growth parameters": {
-                "Config.g_global_AI_compute_mean": Config.g_global_AI_compute_mean,
-                "Config.g_AI_workload_share_mean": Config.g_AI_workload_share_mean,
-                "Config.g_total": Config.g_total,
-                "Config.g_stdev": Config.g_stdev
+            "workflow config": {
+                "PLOT_SCHEMATIC_SCATTER": Config.PLOT_SCHEMATIC_SCATTER,
+                "TRAINING_COMPUTE_PLOTS": Config.TRAINING_COMPUTE_PLOTS,
+                "FIT_ALLOCATION_PLOTS": Config.FIT_ALLOCATION_PLOTS,
+                "GENERATED_SAMPLE_PLOTS": Config.GENERATED_SAMPLE_PLOTS,
+                "SAVE_RESULTS": Config.SAVE_RESULTS,
+                "save_folder": Config.save_folder
             },
             "sampling parameters": {
-                "Config.ALLOC_FIT_TYPE": Config.ALLOC_FIT_TYPE,
-                "Config.POINT_CUM_ALLOC_PARAMS": Config.POINT_CUM_ALLOC_PARAMS,
-                "Config.DISTRIBUTION_CUM_ALLOC_PARAMS": Config.DISTRIBUTION_CUM_ALLOC_PARAMS,
+                "n_simulations": Config.n_simulations
+            },
+            "training compute extrapolation": {
+                "method_choice": Config.method_choice,
+                "historical allocation": Config.hist_alloc,
+                "hist_alloc_multiplier": Config.hist_alloc_multiplier,
+                "allocation type": "fixed" if Config.FIXED_ALLOCATION else "dynamic",
+                "fixed allocation": Config.fixed_alloc if Config.FIXED_ALLOCATION else None,
+                "predicted allocations": Config.pred_alloc_dict if Config.DYNAMIC_ALLOCATION else None,
+                "growth parameters": {
+                    "g_historical": Config.g_historical,
+                    "g_global_AI_compute_mean": Config.g_global_AI_compute_mean,
+                    "g_AI_workload_share_mean": Config.g_AI_workload_share_mean,
+                    "g_total_AI_2027": Config.g_total_AI_2027,
+                    "g_weights": Config.g_weights,
+                    "g_total": Config.g_total,
+                    "g_stdev": Config.g_stdev
+                }
+            },
+            "allocation fit parameters": {
+                "fit_years": Config.fit_years.tolist(),
+                "pred_years": Config.pred_years.tolist(),
+                "constraint_point": Config.constraint_point,
+                "filter_thresholds": Config.filter_thresholds
+            },
+            "sampling parameters": {
+                "ALLOC_FIT_TYPE": Config.ALLOC_FIT_TYPE,
+                "POINT_CUM_ALLOC_PARAMS": Config.POINT_CUM_ALLOC_PARAMS,
+                "DISTRIBUTION_CUM_ALLOC_PARAMS": Config.DISTRIBUTION_CUM_ALLOC_PARAMS,
                 "grad_cum_alloc_range": [Config.grad_cum_alloc_min, Config.grad_cum_alloc_max],
-                "Config.LMS_SAMPLING": Config.LMS_SAMPLING,
+                "LMS_SAMPLING": Config.LMS_SAMPLING,
                 "largest_model_share": {
                     "mean": Config.largest_model_share_mean,
                     "stddev": Config.lms_stddev,
                     "min": Config.min_lms,
                     "max": Config.max_lms
                 },
+                "SET_2024_LMS": Config.SET_2024_LMS,
                 "min_norm_m_range": [Config.min_norm_m_min, Config.min_norm_m_max],
-                "Config.n_catgs": Config.n_catgs
+                "n_catgs": Config.n_catgs
             },
-            "model categories": Config.n_catgs,
             "threshold parameters": {
-                "Config.thresholds": Config.thresholds,
-                "Config.retrodict_thresholds": Config.retrodict_thresholds,
-                "Config.threshold_widths": Config.threshold_widths,
-                "Config.period_freq": Config.period_freq,
-                "Config.CI_percentiles": Config.CI_percentiles
+                "thresholds": Config.thresholds,
+                "retrodict_thresholds": Config.retrodict_thresholds,
+                "threshold_widths": Config.threshold_widths,
+                "period_freq": Config.period_freq,
+                "CI_percentiles": Config.CI_percentiles
             }
         }
 
