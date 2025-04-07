@@ -31,9 +31,7 @@ class Config:
     g_historical=6.3 #from fit years
     g_global_AI_compute_mean=2.25
     g_AI_workload_share_mean=1.4 
-    g_total_AI_2027 = g_global_AI_compute_mean*g_AI_workload_share_mean
     g_weights = [0.25,0.75] #historical, AI_2027
-    g_total = g_weights[0]*g_historical + g_weights[1]*g_total_AI_2027
     g_stdev=0.5
 
 

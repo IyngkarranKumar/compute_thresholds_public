@@ -11,23 +11,38 @@ import itertools
 
 #param search
 if 1:
-    Config.SAVE_RESULTS=False
-    Config.save_folder='results/search_alpha'
+    Config.SAVE_RESULTS=True
+    Config.save_folder='results/AI_2027_ALLOCATIONS'
 
-    LMS_BOUNDS = [(0.01,0.2),()]
-    GROWTH_RATES = [4.0,5.0]
+
+
+    search_config={
+        "DYNAMIC_ALLOCATION":[True],
+        "FIXED_ALLOCATION":[False],
+        "pred_alloc_dict":[{
+            2024: 40/60,
+            2025: 40/60, 
+            2026: 40/60,
+            2027: 30/70,
+            2028: 20/80,
+        }]
+    }
     
+    for key in search_config.keys():
+        if not hasattr(Config,key):
+            raise ValueError(f'Parameter {key} not found in Config class')
 
-    param_combinations = list(itertools.product(LMS_BOUNDS,GROWTH_RATES))
+    param_combinations = list(itertools.product(*search_config.values()))
 
-    for param in param_combinations:
-        print(param)
-        Config.min_lms,Config.max_lms = param[0]
-        Config.g_global_AI_compute_mean = param[1]
-        Config.g_AI_workload_share_mean = 0
-        Config.g_total = Config.g_global_AI_compute_mean + Config.g_AI_workload_share_mean #must set this 
-                
+    for combination in param_combinations:
+        print(combination)
+        # Set config attributes for this parameter combination
+        for param_name,param_value in zip(search_config.keys(),combination):
+            setattr(Config,param_name,param_value) #set the config attributes
+
         main(Config)
+       
+
 
 #scenario run
 if 0: 

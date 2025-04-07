@@ -113,9 +113,7 @@ def main(Config):
                     "g_historical": Config.g_historical,
                     "g_global_AI_compute_mean": Config.g_global_AI_compute_mean,
                     "g_AI_workload_share_mean": Config.g_AI_workload_share_mean,
-                    "g_total_AI_2027": Config.g_total_AI_2027,
                     "g_weights": Config.g_weights,
-                    "g_total": Config.g_total,
                     "g_stdev": Config.g_stdev
                 }
             },
@@ -247,6 +245,11 @@ def main(Config):
                 plt.axhline(y=10**exp,color='gray',linestyle='--',alpha=0.6)
 
     if 1: #Training compute extrapolation
+
+        g_AI_2027 = Config.g_global_AI_compute_mean*Config.g_AI_workload_share_mean
+        g_total = Config.g_weights[0]*Config.g_historical + Config.g_weights[1]*g_AI_2027
+        SAVE_Config['training compute extrapolation']['g_total'] = g_total #for saving 
+        SAVE_Config['training compute extrapolation']['g_AI_2027'] = g_AI_2027 #for saving
                 
         ###DATA STRUCTURE INIT
         LOG_AGGREGATE_COMPUTE_DATA={}
@@ -272,7 +275,7 @@ def main(Config):
                 AI_compute_usage={}
                 sim_noise_term=np.random.normal(0,Config.g_stdev) #set noise term for each sim 
                 for idx,year in enumerate(Config.pred_years):
-                    AI_compute_usage[year] = total_usage_previous_year * (Config.g_total+sim_noise_term) ** (idx + 1)
+                    AI_compute_usage[year] = total_usage_previous_year * (g_total+sim_noise_term) ** (idx + 1)
 
                 log_aggregate_compute_predictions_dict = {year: np.log10(compute) for year, compute in AI_compute_usage.items()}
                 LOG_AGGREGATE_COMPUTE_DATA[sim]['Total-method 2027'] = log_aggregate_compute_predictions_dict
@@ -915,4 +918,4 @@ def main(Config):
                 frontier_threshold_predicted.to_csv(f,sep='\t')
 
 
-main(Config)
+#main(Config)
