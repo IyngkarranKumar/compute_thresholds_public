@@ -2,31 +2,32 @@ import numpy as np
 
 class Config:
     
-    #workflow config
+    name='baseline'
     PLOT_SCHEMATIC_SCATTER=False
     TRAINING_COMPUTE_PLOTS=False
     FIT_ALLOCATION_PLOTS=False
     GENERATED_SAMPLE_PLOTS=False
-    SAVE_RESULTS,save_folder=False, 'results/test_save_folder'
+    COMPUTE_FRONTIER_COUNTS=True
+    SAVE_RESULTS,save_folder = True, 'results/paper_scenarios'
 
     #sampling parameters
-    n_simulations = 100 #for bootstrappng, sampling parameters etc. n_simulations = 10 #for bootstrappng, sampling parameters etc. 
+    n_simulations = 1 #for bootstrappng, sampling parameters etc. n_simulations = 10 #for bootstrappng, sampling parameters etc. 
 
     #training compute extrapolation config 
     AI2027_EXTRAP=True
     method_choice="method 2027" #['linear extrapolation', 'method 2027']
-    hist_alloc=70/30
+    hist_alloc=40/60
     hist_alloc_multiplier=1+(1/hist_alloc)
     FIXED_ALLOCATION=False
-    fixed_alloc=70/30
+    fixed_alloc=40/60
     DYNAMIC_ALLOCATION=True #inference scaling continues improving
     assert(FIXED_ALLOCATION+DYNAMIC_ALLOCATION)==1
     pred_alloc_dict = {
-            2024: 90/10,
-            2025: 90/10,
-            2026: 70/30,
-            2027: 70/30,
-            2028: 70/30,
+            2024: 40/60,
+            2025: 40/60,
+            2026: 40/60,
+            2027: 40/60,
+            2028: 40/60,
         }
     g_historical=6.3 #from fit years
     g_global_AI_compute_mean=2.25

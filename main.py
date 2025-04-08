@@ -92,6 +92,7 @@ def main(Config):
         #SAVE Config
         SAVE_Config={
             "workflow config": {
+                "name": Config.name,
                 "PLOT_SCHEMATIC_SCATTER": Config.PLOT_SCHEMATIC_SCATTER,
                 "TRAINING_COMPUTE_PLOTS": Config.TRAINING_COMPUTE_PLOTS,
                 "FIT_ALLOCATION_PLOTS": Config.FIT_ALLOCATION_PLOTS,
@@ -455,6 +456,7 @@ def main(Config):
         COMPUTE_SAMPLE_DATA = {sim: {int(year): {} for year in all_years} for sim in range(Config.n_simulations)} #init data structure 
 
         for sim in range(Config.n_simulations):
+            print(f"Sim {sim} of {Config.n_simulations}")
 
             for year in all_years:
                 #get total compute
@@ -464,31 +466,29 @@ def main(Config):
                     log_agg_training_compute = LOG_AGGREGATE_COMPUTE_DATA[sim]["aggregate training compute"][year]
                 agg_training_compute = 10**log_agg_training_compute 
 
-                #set largest model that year 
-                if Config.LMS_SAMPLING=='gaussian':
-                    norm_largest_model = truncated_normal(mean=Config.largest_model_share_mean,std_dev=Config.lms_stddev,min_lms=Config.min_lms,max_lms=Config.max_lms, size=1)[0]
-                elif Config.LMS_SAMPLING=='uniform':
-                    norm_largest_model = np.random.uniform(Config.min_lms, Config.max_lms)
-                if year==2024 and Config.SET_2024_LMS: #2024 set
-                    norm_largest_model=0.1
 
-                largest_model = norm_largest_model * agg_training_compute
-                assert largest_model <= 0.5*agg_training_compute, print(f"Year: {year}, Largest Model: {largest_model}, Total Training Compute: {agg_training_compute}")
-
-                #sample smallest model that year
-                min_norm_m = 10**(np.random.uniform(np.log10(Config.min_norm_m_min),np.log10(Config.min_norm_m_max)))
-
-                # model sizes (as fraction of largest_model)
-                norm_ms = np.logspace(np.log10(min_norm_m), np.log10(1.0), num=Config.n_catgs)
-                log_norm_ms = np.log10(norm_ms)
-
-
-                assert Config.ALLOC_FIT_TYPE in ['cumulative','categorical']
-
-                #generate a valid compute bin allocations (catg_alloc)
-
+                #generate compute bin allocations (catg_alloc)
                 VALID_ALLOCATION=False
                 while not VALID_ALLOCATION:
+
+                    #set largest model 
+                    norm_largest_model = np.random.uniform(Config.min_lms, Config.max_lms)
+
+                    #for setting 2024 LMS    
+                    if year==2024 and Config.SET_2024_LMS: norm_largest_model=0.1
+
+                    largest_model = norm_largest_model * agg_training_compute
+                    assert largest_model <= 0.5*agg_training_compute, print(f"Year: {year}, Largest Model: {largest_model}, Total Training Compute: {agg_training_compute}")
+
+                    #sample smallest model that year
+                    min_norm_m = 10**(np.random.uniform(np.log10(Config.min_norm_m_min),np.log10(Config.min_norm_m_max)))
+
+                    # model sizes (as fraction of largest_model)
+                    norm_ms = np.logspace(np.log10(min_norm_m), np.log10(1.0), num=Config.n_catgs)
+                    log_norm_ms = np.log10(norm_ms)
+
+                    assert Config.ALLOC_FIT_TYPE in ['cumulative','categorical']
+
                     if Config.POINT_CUM_ALLOC_PARAMS:
                         grad_cum_alloc = np.mean([FIT_DATA[year]['cum_alloc_fits'][0] for year in FIT_DATA.keys()])
                         int_cum_alloc = np.mean([FIT_DATA[year]['cum_alloc_fits'][1] for year in FIT_DATA.keys()])
@@ -500,8 +500,8 @@ def main(Config):
                     log_cum_alloc = grad_cum_alloc*log_norm_ms + int_cum_alloc
                     cum_alloc = 10**log_cum_alloc
                     catg_alloc = np.diff(cum_alloc)
-                    sum_condition = abs(np.sum(catg_alloc) - 1) < 1e-5
-                    #assert sum_condition, f"Sum of category allocations {np.sum(catg_alloc)} not equal to 1" #stop code if not equal to 1
+                    sum_condition = abs(np.sum(catg_alloc) - 1) < 1e-2
+                    assert sum_condition, f"Sum of category allocations {np.sum(catg_alloc)} not equal to 1" #stop code if not equal to 1
 
                     residual_catg_alloc = 1-np.sum(catg_alloc)
                     catg_alloc = np.concatenate(([residual_catg_alloc],catg_alloc))
@@ -512,14 +512,12 @@ def main(Config):
                     absl_allocs = catg_alloc * agg_training_compute
                     alloc_ub_check_var = [ctg[-1] for ctg in absl_model_catgs] < absl_allocs
                     alloc_ub_condition = np.all(alloc_ub_check_var) #ensure all allocs are above the ctg_ub
-                    #assert(alloc_ub_condition), print(f'{(~alloc_ub_check_var).sum()/len(alloc_ub_check_var)*100} of alloc-ctg pairs exceed ctg_ub')
 
                     if alloc_ub_condition: 
                         VALID_ALLOCATION=True
                     else:
                         VALID_ALLOCATION=False
-                        #print(f'{(~alloc_ub_check_var).sum()/len(alloc_ub_check_var)*100} of alloc-ctg pairs exceed ctg_ub')
-                        #print(f"Invalid allocation for year {year}, gradient: {grad_cum_alloc}")
+
 
                 model_ctgs = [(norm_ms[i], norm_ms[i+1]) for i in range(len(norm_ms) - 1)]
                 model_ctgs = [(min_norm_m,min_norm_m)] + model_ctgs #for first ctg bin - we sample just the smallest model
@@ -529,7 +527,7 @@ def main(Config):
 
                 compute_samples_rand = []
 
-                #draw samples from valid bin allocations
+                #draw samples
                 for idx, (ctg, alloc) in enumerate(list(zip(model_ctgs, bin_compute_allocs))):
                     if idx==0: continue
                     
@@ -542,6 +540,7 @@ def main(Config):
                     if alloc==0:  # skip bins which have no compute allocated to them - occurs when allocation gradient large 
                         continue 
 
+                    
                     #perform sampling 
                     allocnorm_model_bin_lb, allocnorm_model_bin_ub = model_bin_lb / alloc, model_bin_ub / alloc  # this is purely just for sampling; no physical meaning
                     running_tot = 0
@@ -551,6 +550,7 @@ def main(Config):
                         sample = np.random.uniform(allocnorm_model_bin_lb, allocnorm_model_bin_ub)
                         sample = float(sample) if isinstance(sample, np.ndarray) else sample
                         assert sample <= 1 #sample should be smaller than alloc OR equal to it
+
 
                         # SUM CHECK
                         if running_tot + sample > 1:
@@ -563,10 +563,8 @@ def main(Config):
                     bin_samples = alloc*np.array(allocnormed_samples) # un-normalise
                     compute_samples_rand = compute_samples_rand + (list(bin_samples)) #add to sample list
 
-                    #print(f"Number of samples drawn for model category: {len(allocnormed_samples)}")
 
                 compute_samples_rand = [x for x in compute_samples_rand if x != 0]
-                #print(f"Samples drawn for sim {sim}, year {year}: {len(compute_samples_rand)}")
 
                 COMPUTE_SAMPLE_DATA[sim][year]['samples'] = compute_samples_rand
                 COMPUTE_SAMPLE_DATA[sim][year]['date'] = [decimal_year_to_date(year + np.random.random()) for _ in compute_samples_rand]  # convert to standard pd datetime format
@@ -644,6 +642,7 @@ def main(Config):
 
         #observed
         # Create DataFrame from observed counts
+        print('Computing retrodicted absolute counts')
         df_observed = pd.DataFrame.from_dict({threshold: {year: sum(df[df['year'] == year]['compute'] > 10**threshold)
                                                         for year in retrodict_years}
                                             for threshold in Config.retrodict_thresholds}, 
@@ -708,84 +707,107 @@ def main(Config):
         absolute_threshold_retrodicted_difference = difference_df
 
 
+        if Config.COMPUTE_FRONTIER_COUNTS:
+            print('Computing retrodicted frontier counts')
+            # Group data into specified periods
+            df['period'] = round_dates(df['date'], Config.period_freq)
+            df['log_compute'] = np.log10(df['compute'])
 
-        # Group data into specified periods
-        df['period'] = round_dates(df['date'], Config.period_freq)
-        df['log_compute'] = np.log10(df['compute'])
+            frontier_counts = {}
 
-        frontier_counts = {}
-
-        for year in Config.fit_years:
-            year_filtered_df = df[df['date'].dt.year == year]
-            frontier_counts[year] = {}
-            for width in Config.threshold_widths:
-                width_year_counts = 0
-                for idx, period in enumerate(sorted(year_filtered_df['period'].unique())):
-                    largest_model = df[df['period'] < period]['compute'].max()  # get largest model before this period
-                    period_data = df[df.period == period]
-                    within_threshold_condition = ((np.log10(largest_model) - np.log10(period_data['compute'])) <= width) & ((np.log10(largest_model) - np.log10(period_data['compute'])) > 0)
-                    above_frontier_condition = period_data['compute'] > largest_model
-                    count = within_threshold_condition.sum() + above_frontier_condition.sum()
-                    width_year_counts += count
-                frontier_counts[year][width] = width_year_counts
-
-        # Calculate frontier counts for each percentile
-        sample_frontier_counts = {year: {width: [] for width in Config.threshold_widths} for year in Config.fit_years}
-
-        for sim, sim_data in COMPUTE_SAMPLE_DATA.items():
             for year in Config.fit_years:
-                year_data = sim_data[year]
-                year_data['period'] = round_dates(pd.to_datetime(year_data['date']), Config.period_freq)
-                year_data['log_compute'] = np.log10(year_data['samples'])
-                
+                year_filtered_df = df[df['date'].dt.year == year]
+                frontier_counts[year] = {}
                 for width in Config.threshold_widths:
                     width_year_counts = 0
-                    for period in sorted(year_data['period'].unique()):
-                        largest_model = max(np.concatenate([np.array(data['samples'])[np.array(data['date']) < period] for data in sim_data.values()]))
-                        period_sample_data = np.array(year_data['samples'])[year_data['period'] == period]
-                        within_threshold_condition = (np.log10(largest_model) - np.log10(period_sample_data) <= width) & (np.log10(largest_model) - np.log10(period_sample_data) > 0)
-                        above_frontier_condition = period_sample_data > largest_model
-                        width_year_counts += within_threshold_condition.sum() + above_frontier_condition.sum()
-                    sample_frontier_counts[year][width].append(width_year_counts)
+                    for idx, period in enumerate(sorted(year_filtered_df['period'].unique())):
+                        largest_model = df[df['period'] < period]['compute'].max()  # get largest model before this period
+                        period_data = df[df.period == period]
+                        within_threshold_condition = ((np.log10(largest_model) - np.log10(period_data['compute'])) <= width) & ((np.log10(largest_model) - np.log10(period_data['compute'])) > 0)
+                        above_frontier_condition = period_data['compute'] > largest_model
+                        count = within_threshold_condition.sum() + above_frontier_condition.sum()
+                        width_year_counts += count
+                    frontier_counts[year][width] = width_year_counts
 
-        # Calculate percentile counts for each year and width
-        percentile_frontier_counts = {year: {width: {percentile: [] for percentile in Config.CI_percentiles} for width in Config.threshold_widths} for year in Config.fit_years}
-        for year in Config.fit_years:
-            for width in Config.threshold_widths:
-                for percentile in Config.CI_percentiles:
-                    percentile_count = (np.percentile(sample_frontier_counts[year][width], percentile)).astype(int)
-                    percentile_frontier_counts[year][width][percentile] = percentile_count
+            # Calculate frontier counts for each percentile
+            # Process each simulation
+            for sim, sim_data in COMPUTE_SAMPLE_DATA.items():
+                
+                # Pre-compute dates and periods for all years to avoid repeated conversions
+                for year, year_data in sim_data.items():
+                    year_data['period'] = round_dates(pd.to_datetime(year_data['date']), period_freq)
+                    year_data['log_compute'] = np.log10(year_data['samples'])
+                
+                # Pre-compute largest models for each period across all years
+                all_periods = sorted(set(period for data in sim_data.values() for period in data['period'].unique()))
+                largest_models = {}
+                all_samples = np.concatenate([np.array(data['samples']) for data in sim_data.values()])
+                all_dates = np.concatenate([np.array(data['date']) for data in sim_data.values()])
+                for period in all_periods:
+                    largest_models[period] = np.max(all_samples[all_dates < period])
+                
+                # Process each year
+                for year in fit_years:
+                    year_data = sim_data[year]
+                    year_samples = np.array(year_data['samples'])
+                    year_periods = year_data['period'].unique()
+                    
+                    # Process each threshold width
+                    for width in threshold_widths:
+                        width_year_counts = 0
+                        
+                        # Vectorized operations for each period
+                        for period in sorted(year_periods):
+                            period_mask = year_data['period'] == period
+                            period_samples = year_samples[period_mask]
+                            largest_model = largest_models[period]
+                            
+                            # Combine conditions in single vectorized operation
+                            log_ratio = np.log10(largest_model) - np.log10(period_samples)
+                            counts = np.sum((log_ratio <= width) & (log_ratio > 0)) + np.sum(period_samples > largest_model)
+                            width_year_counts += counts
+                            
+                        sample_frontier_counts[year][width].append(width_year_counts)
 
-        # Create combined dataframe with observed and retrodicted values
-        combined_df = pd.DataFrame(index=Config.threshold_widths)
-        combined_df.index.name = 'width'
+                    
+            # Calculate percentile counts for each year and width
+            percentile_frontier_counts = {year: {width: {percentile: [] for percentile in Config.CI_percentiles} for width in Config.threshold_widths} for year in Config.fit_years}
+            for year in Config.fit_years:
+                for width in Config.threshold_widths:
+                    for percentile in Config.CI_percentiles:
+                        percentile_count = (np.percentile(sample_frontier_counts[year][width], percentile)).astype(int)
+                        percentile_frontier_counts[year][width][percentile] = percentile_count
 
-        for year in Config.fit_years:
-            combined_df[year] = [f"{frontier_counts[year][width]} ({','.join(str(percentile_frontier_counts[year][width][p]) for p in Config.CI_percentiles)})" for width in Config.threshold_widths]
+            # Create combined dataframe with observed and retrodicted values
+            combined_df = pd.DataFrame(index=Config.threshold_widths)
+            combined_df.index.name = 'width'
 
-        # Calculate differences between observed and retrodicted values
-        difference_df = pd.DataFrame(index=Config.threshold_widths)
-        difference_df.index.name = 'width'
+            for year in Config.fit_years:
+                combined_df[year] = [f"{frontier_counts[year][width]} ({','.join(str(percentile_frontier_counts[year][width][p]) for p in Config.CI_percentiles)})" for width in Config.threshold_widths]
 
-        for year in Config.fit_years:
-            differences = []
-            for width in Config.threshold_widths:
-                obs = frontier_counts[year][width]
-                rets = [percentile_frontier_counts[year][width][p] for p in Config.CI_percentiles]
-                differences.append(f"({obs-rets[0]}, {obs-rets[1]}, {obs-rets[2]})")
-            difference_df[year] = differences
+            # Calculate differences between observed and retrodicted values
+            difference_df = pd.DataFrame(index=Config.threshold_widths)
+            difference_df.index.name = 'width'
+
+            for year in Config.fit_years:
+                differences = []
+                for width in Config.threshold_widths:
+                    obs = frontier_counts[year][width]
+                    rets = [percentile_frontier_counts[year][width][p] for p in Config.CI_percentiles]
+                    differences.append(f"({obs-rets[0]}, {obs-rets[1]}, {obs-rets[2]})")
+                difference_df[year] = differences
 
 
 
-        frontier_threshold_retrodicted = combined_df
-        frontier_threshold_retrodicted_difference = difference_df
+            frontier_threshold_retrodicted = combined_df
+            frontier_threshold_retrodicted_difference = difference_df
 
 
     if 1: # predictions
 
         #predictions for absolute Config.thresholds
         ## regular counts
-
+        print('Computing predicted absolute counts')
         threshold_counts_all_simulations = {year: {threshold: [] for threshold in Config.thresholds} for year in Config.pred_years.astype(int).ravel()}
 
         # Iterate over each simulation
@@ -830,70 +852,96 @@ def main(Config):
         absolute_threshold_predicted = df_combined_cumulative
 
 
-
         #period_data = pd.date_range(start='2024-01-01', end='2029-01-01', freq=Config.period_freq).strftime('%Y-%m-%d %H:%M:%S').tolist()
+        if Config.COMPUTE_FRONTIER_COUNTS:
+            print('Computing predicted frontier counts')
+            frontier_counts_all_simulations = {year: {width: [] for width in Config.threshold_widths} for year in Config.pred_years}
 
-        frontier_counts_all_simulations = {year: {width: [] for width in Config.threshold_widths} for year in Config.pred_years}
-
-        for sim in range(len(COMPUTE_SAMPLE_DATA)):
-            for year in Config.pred_years:
-                year_data = COMPUTE_SAMPLE_DATA[sim][year]
-                year_data['period'] = round_dates(pd.to_datetime(year_data['date']), Config.period_freq)
-                year_data['log_compute'] = np.log10(year_data['samples'])
+            # Process each simulation
+            for sim in range(len(COMPUTE_SAMPLE_DATA)):
+                sim_data = COMPUTE_SAMPLE_DATA[sim]
                 
-                for width in Config.threshold_widths:
-                    width_year_counts = 0
-                    for period in sorted(year_data['period'].unique()):
-                        largest_model = max(np.concatenate([np.array(data['samples'])[np.array(data['date']) < period] for data in COMPUTE_SAMPLE_DATA[sim].values()])) #get largest model until this period
-                        period_sample_data = np.array(year_data['samples'])[year_data['period'] == period] #get models released in this period
-                        within_threshold_condition = (np.log10(largest_model) - np.log10(period_sample_data) <= width) & (np.log10(largest_model) - np.log10(period_sample_data) > 0) #0 condition makes sure we don't catch models larger than frontier
-                        above_frontier_condition  = period_sample_data > largest_model
-                        count = within_threshold_condition.sum() + above_frontier_condition.sum() #how many models released this period within Config.thresholds of largest model seen so far.
-                        width_year_counts += count
-                    frontier_counts_all_simulations[year][width].append(width_year_counts)
+                # Pre-compute dates and periods for all years
+                for year, year_data in sim_data.items():
+                    year_data['period'] = round_dates(pd.to_datetime(year_data['date']), period_freq)
+                    year_data['log_compute'] = np.log10(year_data['samples'])
+                
+                # Pre-compute largest models for each period across all years
+                all_periods = sorted(set(period for data in sim_data.values() for period in data['period'].unique()))
+                largest_models = {}
+                all_samples = np.concatenate([np.array(data['samples']) for data in sim_data.values()])
+                all_dates = np.concatenate([np.array(data['date']) for data in sim_data.values()])
+                for period in all_periods:
+                    largest_models[period] = np.max(all_samples[all_dates < period])
+                
+                # Process each year
+                for year in pred_years:
+                    year_data = sim_data[year]
+                    year_samples = np.array(year_data['samples'])
+                    year_periods = year_data['period'].unique()
+                    
+                    # Process each threshold width
+                    for width in threshold_widths:
+                        width_year_counts = 0
+                        
+                        # Vectorized operations for each period
+                        for period in sorted(year_periods):
+                            period_mask = year_data['period'] == period
+                            period_samples = year_samples[period_mask]
+                            largest_model = largest_models[period]
+                            
+                            # Combine conditions in single vectorized operation
+                            log_ratio = np.log10(largest_model) - np.log10(period_samples)
+                            counts = np.sum((log_ratio <= width) & (log_ratio > 0)) + np.sum(period_samples > largest_model)
+                            width_year_counts += counts
+                            
+                        frontier_counts_all_simulations[year][width].append(width_year_counts)
 
 
+            # Create DataFrames for each percentile
+            frontier_percentile_dfs = {}
+            for percentile in Config.CI_percentiles:
+                frontier_percentile_dfs[percentile] = pd.DataFrame(
+                    {year: [int(round(np.percentile(frontier_counts_all_simulations[year][width], percentile)))
+                            for width in Config.threshold_widths]
+                    for year in Config.pred_years},
+                    index=[f'Within {width} OOM' for width in Config.threshold_widths]
+                )
 
-        # Create DataFrames for each percentile
-        frontier_percentile_dfs = {}
-        for percentile in Config.CI_percentiles:
-            frontier_percentile_dfs[percentile] = pd.DataFrame(
-                {year: [int(round(np.percentile(frontier_counts_all_simulations[year][width], percentile)))
-                        for width in Config.threshold_widths]
-                for year in Config.pred_years},
-                index=[f'Within {width} OOM' for width in Config.threshold_widths]
-            )
+            # Combine into a single DataFrame
+            df_frontier_combined = pd.DataFrame()
+            for year in frontier_percentile_dfs[50].columns:
+                for idx in frontier_percentile_dfs[50].index:
+                    values = [str(frontier_percentile_dfs[p].loc[idx, year]) for p in Config.CI_percentiles]
+                    df_frontier_combined.loc[idx, year] = f"[{', '.join(values)}]"
 
-        # Combine into a single DataFrame
-        df_frontier_combined = pd.DataFrame()
-        for year in frontier_percentile_dfs[50].columns:
-            for idx in frontier_percentile_dfs[50].index:
-                values = [str(frontier_percentile_dfs[p].loc[idx, year]) for p in Config.CI_percentiles]
-                df_frontier_combined.loc[idx, year] = f"[{', '.join(values)}]"
-
-        frontier_threshold_predicted = df_frontier_combined
+            frontier_threshold_predicted = df_frontier_combined
 
 
     if 1: #display and save
 
         if not Config.SAVE_RESULTS:
+
             logging.info("Displaying results...\n")
             logging.info("=== Retrodicted Config.thresholds ===")
             logging.info("=== Absolute Threshold Retrodicted ===")
             display(absolute_threshold_retrodicted)
-            #display(absolute_threshold_retrodicted_difference)
-            logging.info("=== Frontier Threshold Retrodicted ===")
-            display(frontier_threshold_retrodicted)
-            #display(frontier_threshold_retrodicted_difference)
             logging.info("=== Predicted Config.thresholds ===")
             logging.info("=== Absolute Threshold Predicted ===")
             display(absolute_threshold_predicted)
-            logging.info("=== Frontier Threshold Predicted ===")
-            display(frontier_threshold_predicted)
+
+            if Config.COMPUTE_FRONTIER_COUNTS:
+                logging.info("=== Frontier Threshold Retrodicted ===")
+                display(frontier_threshold_retrodicted)
+                logging.info("=== Frontier Threshold Predicted ===")
+                display(frontier_threshold_predicted)
         
 
         if Config.SAVE_RESULTS:
-        # Create results directory if it doesn't exist
+
+            #assert Config.COMPUTE_FRONTIER_COUNTS, "Frontier counts must be computed to save results"
+            
+            # Create results directory if it doesn't exist
             if not os.path.exists(Config.save_folder):
                 os.makedirs(Config.save_folder)
 
@@ -908,14 +956,15 @@ def main(Config):
                 f.write("Absolute Threshold Retrodicted:\n")
                 absolute_threshold_retrodicted.to_csv(f,sep='\t')
                 f.write('\n\n')
-                f.write("Frontier Threshold Retrodicted:\n")
-                frontier_threshold_retrodicted.to_csv(f,sep='\t')
-                f.write('\n\n')
                 f.write("Absolute Threshold Predicted:\n")
                 absolute_threshold_predicted.to_csv(f,sep='\t')
                 f.write('\n\n')
-                f.write("Frontier Threshold Predicted:\n")
-                frontier_threshold_predicted.to_csv(f,sep='\t')
+                if Config.COMPUTE_FRONTIER_COUNTS:
+                    f.write("Frontier Threshold Retrodicted:\n")
+                    frontier_threshold_retrodicted.to_csv(f,sep='\t')
+                    f.write('\n\n')
+                    f.write("Frontier Threshold Predicted:\n")
+                    frontier_threshold_predicted.to_csv(f,sep='\t')
 
 
 #main(Config)

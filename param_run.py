@@ -1,32 +1,52 @@
 import importlib
 import config
 import main
-importlib.reload(main)
-importlib.reload(config)
-from main import main
-from config import Config  #load in config in file
+import param_sweep_config
 import itertools
 
+importlib.reload(main)
+importlib.reload(config)
+importlib.reload(param_sweep_config)
+
+from main import main
+from config import Config  #load in config in file
+from param_sweep_config import *
 
 
-#param search
 if 1:
+
+    for scenario in paper_scenarios:
+        #reset to baseline config 
+        importlib.reload(config); from config import Config
+        Config.name = scenario.get('name', 'no name found'); print('\n\n',Config.name)
+        scenario = {k:v for k,v in scenario.items() if k != 'name'}
+
+        param_combinations = list(itertools.product(*scenario.values()))
+        print(f"Running {len(param_combinations)} combinations for {Config.name}:")
+        for i, combo in enumerate(param_combinations, 1):
+            param_str = ", ".join(f"{k}={v}" for k,v in zip(scenario.keys(), combo)) if combo else "baseline"
+            print(f"{i}. {param_str}")
+        
+        
+        for combination in param_combinations:
+            if len(combination) == 0: #run baseline
+                main(Config)
+            else: 
+                for param_name,param_value in zip(scenario.keys(),combination):
+                    setattr(Config,param_name,param_value) #set the config attributes
+                main(Config)
+
+        
+
+
+    
+#param search
+if 0:
     Config.SAVE_RESULTS=True
     Config.save_folder='results/AI_2027_ALLOCATIONS'
 
 
-
-    search_config={
-        "DYNAMIC_ALLOCATION":[True],
-        "FIXED_ALLOCATION":[False],
-        "pred_alloc_dict":[{
-            2024: 40/60,
-            2025: 40/60, 
-            2026: 40/60,
-            2027: 30/70,
-            2028: 20/80,
-        }]
-    }
+    search_config=None
     
     for key in search_config.keys():
         if not hasattr(Config,key):
