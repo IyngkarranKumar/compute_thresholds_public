@@ -8,10 +8,10 @@ class Config:
     FIT_ALLOCATION_PLOTS=False
     GENERATED_SAMPLE_PLOTS=False
     COMPUTE_FRONTIER_COUNTS=True
-    SAVE_RESULTS,save_folder = True, 'results/paper_scenarios'
+    SAVE_RESULTS,save_folder = False, 'results/paper_scenarios_c'
 
     #sampling parameters
-    n_simulations = 1 #for bootstrappng, sampling parameters etc. n_simulations = 10 #for bootstrappng, sampling parameters etc. 
+    n_simulations = 100 #for bootstrappng, sampling parameters etc. n_simulations = 10 #for bootstrappng, sampling parameters etc. 
 
     #training compute extrapolation config 
     AI2027_EXTRAP=True
@@ -26,8 +26,8 @@ class Config:
             2024: 40/60,
             2025: 40/60,
             2026: 40/60,
-            2027: 40/60,
-            2028: 40/60,
+            2027: 30/70,
+            2028: 30/70,
         }
     g_historical=6.3 #from fit years
     g_global_AI_compute_mean=2.25
@@ -53,7 +53,7 @@ class Config:
     LMS_SAMPLING="uniform"
     assert LMS_SAMPLING in ['gaussian', 'uniform']
     largest_model_share_mean,lms_stddev,min_lms,max_lms=0.3, 0.1,0.05,0.50
-    SET_2024_LMS=True
+    SET_2024_LMS=False
 
 
     #min m sampling

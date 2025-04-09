@@ -24,13 +24,6 @@ allocations_search_config={
             2028: 20/80,
         },
         {
-            2024: 40/60,
-            2025: 40/60, 
-            2026: 40/60,
-            2027: 30/70,
-            2028: 20/80,
-        },
-        {
             2024: 90/10,
             2025: 90/10, 
             2026: 70/30,
@@ -55,6 +48,7 @@ allocation_gradient_config={
 
 paper_scenarios = [baseline_scenario_config, standard_lms_2024_sampling, allocations_search_config, growth_weightings_config, allocation_gradient_config]
 #paper_scenarios= [baseline_scenario_config]
+paper_scenarios = [standard_lms_2024_sampling]
 
 for scenario in paper_scenarios:
     assert np.all(list((hasattr(Config,key) for key in scenario.keys()))), f"Scenario {scenario} has a key that is not in Config"

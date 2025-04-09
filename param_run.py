@@ -34,7 +34,6 @@ if 1:
             else: 
                 for param_name,param_value in zip(scenario.keys(),combination):
                     setattr(Config,param_name,param_value) #set the config attributes
-                main(Config)
 
         
 

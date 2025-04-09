@@ -149,6 +149,7 @@ def main(Config):
             }
         }
 
+
     if 1: #===DATA LOADING===
         #Feb 2025 dataset
 
@@ -731,11 +732,15 @@ def main(Config):
 
             # Calculate frontier counts for each percentile
             # Process each simulation
+
+            sample_frontier_counts = {year: {width: [] for width in Config.threshold_widths} for year in Config.fit_years}
+
+
             for sim, sim_data in COMPUTE_SAMPLE_DATA.items():
                 
                 # Pre-compute dates and periods for all years to avoid repeated conversions
                 for year, year_data in sim_data.items():
-                    year_data['period'] = round_dates(pd.to_datetime(year_data['date']), period_freq)
+                    year_data['period'] = round_dates(pd.to_datetime(year_data['date']), Config.period_freq)
                     year_data['log_compute'] = np.log10(year_data['samples'])
                 
                 # Pre-compute largest models for each period across all years
@@ -747,13 +752,13 @@ def main(Config):
                     largest_models[period] = np.max(all_samples[all_dates < period])
                 
                 # Process each year
-                for year in fit_years:
+                for year in Config.fit_years:
                     year_data = sim_data[year]
                     year_samples = np.array(year_data['samples'])
                     year_periods = year_data['period'].unique()
                     
                     # Process each threshold width
-                    for width in threshold_widths:
+                    for width in Config.threshold_widths:
                         width_year_counts = 0
                         
                         # Vectorized operations for each period
@@ -863,7 +868,7 @@ def main(Config):
                 
                 # Pre-compute dates and periods for all years
                 for year, year_data in sim_data.items():
-                    year_data['period'] = round_dates(pd.to_datetime(year_data['date']), period_freq)
+                    year_data['period'] = round_dates(pd.to_datetime(year_data['date']), Config.period_freq)
                     year_data['log_compute'] = np.log10(year_data['samples'])
                 
                 # Pre-compute largest models for each period across all years
@@ -875,13 +880,13 @@ def main(Config):
                     largest_models[period] = np.max(all_samples[all_dates < period])
                 
                 # Process each year
-                for year in pred_years:
+                for year in Config.pred_years:
                     year_data = sim_data[year]
                     year_samples = np.array(year_data['samples'])
                     year_periods = year_data['period'].unique()
                     
                     # Process each threshold width
-                    for width in threshold_widths:
+                    for width in Config.threshold_widths:
                         width_year_counts = 0
                         
                         # Vectorized operations for each period
@@ -967,4 +972,4 @@ def main(Config):
                     frontier_threshold_predicted.to_csv(f,sep='\t')
 
 
-#main(Config)
+main(Config)
