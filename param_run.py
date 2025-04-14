@@ -22,19 +22,22 @@ if 1:
         scenario = {k:v for k,v in scenario.items() if k != 'name'}
 
         param_combinations = list(itertools.product(*scenario.values()))
+        param_combinations = [list(combo)for combo in param_combinations if combo[1]==combo[2]] #for the allocation gradient
         print(f"Running {len(param_combinations)} combinations for {Config.name}:")
         for i, combo in enumerate(param_combinations, 1):
             param_str = ", ".join(f"{k}={v}" for k,v in zip(scenario.keys(), combo)) if combo else "baseline"
-            print(f"{i}. {param_str}")
+            print(f"{i}. {param_str}\n")
         
         
         for combination in param_combinations:
             if len(combination) == 0: #run baseline
+                print('running baseline')
                 main(Config)
             else: 
                 for param_name,param_value in zip(scenario.keys(),combination):
                     setattr(Config,param_name,param_value) #set the config attributes
-
+                print(f"Running {param_str}")
+                main(Config)
         
 
 

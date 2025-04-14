@@ -8,7 +8,7 @@ class Config:
     FIT_ALLOCATION_PLOTS=False
     GENERATED_SAMPLE_PLOTS=False
     COMPUTE_FRONTIER_COUNTS=True
-    SAVE_RESULTS,save_folder = False, 'results/paper_scenarios_c'
+    SAVE_RESULTS,save_folder = True, 'results'
 
     #sampling parameters
     n_simulations = 100 #for bootstrappng, sampling parameters etc. n_simulations = 10 #for bootstrappng, sampling parameters etc. 
@@ -46,7 +46,7 @@ class Config:
     ALLOC_FIT_TYPE='cumulative' #[cumulative, categorical]
     POINT_CUM_ALLOC_PARAMS=False #takes mean of historical datas
     DISTRIBUTION_CUM_ALLOC_PARAMS=True
-    grad_cum_alloc_min, grad_cum_alloc_max = 0.9,1.1
+    grad_cum_alloc_min, grad_cum_alloc_max = 0.5,0.7
     assert(POINT_CUM_ALLOC_PARAMS+DISTRIBUTION_CUM_ALLOC_PARAMS)==1, "Only one of DEFAULT_CUM_ALLOC_PARAMS or CUSTOM_CUM_ALLOC_PARAMS can be True"
 
     #IMPORTANT PARAMETER - largest model share
