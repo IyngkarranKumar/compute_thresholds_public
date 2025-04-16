@@ -8,3 +8,4 @@ scratch_files/
 logs/
 test.py
 results/
+wandb/
