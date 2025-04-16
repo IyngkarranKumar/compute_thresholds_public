@@ -22,7 +22,12 @@ if 1:
         scenario = {k:v for k,v in scenario.items() if k != 'name'}
 
         param_combinations = list(itertools.product(*scenario.values()))
+
+        ###REMOVE FOR NON-GRADIENT SCENARIOS
         param_combinations = [list(combo)for combo in param_combinations if combo[1]==combo[2]] #for the allocation gradient
+
+
+
         print(f"Running {len(param_combinations)} combinations for {Config.name}:")
         for i, combo in enumerate(param_combinations, 1):
             param_str = ", ".join(f"{k}={v}" for k,v in zip(scenario.keys(), combo)) if combo else "baseline"

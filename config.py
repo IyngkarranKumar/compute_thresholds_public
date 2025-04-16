@@ -9,9 +9,11 @@ class Config:
     GENERATED_SAMPLE_PLOTS=False
     COMPUTE_FRONTIER_COUNTS=True
     SAVE_RESULTS,save_folder = True, 'results'
+    WANDB_LOGGING, wandb_project=False, 'test-space'
+
 
     #sampling parameters
-    n_simulations = 100 #for bootstrappng, sampling parameters etc. n_simulations = 10 #for bootstrappng, sampling parameters etc. 
+    n_simulations = 1 #for bootstrappng, sampling parameters etc. n_simulations = 10 #for bootstrappng, sampling parameters etc. 
 
     #training compute extrapolation config 
     AI2027_EXTRAP=True

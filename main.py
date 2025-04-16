@@ -38,6 +38,7 @@ def main(Config):
         from collections import defaultdict
         import warnings
         from IPython.display import display
+        import wandb 
         
         end_time = time.time()
         logging.info(f"Imports completed in {end_time - start_time:.2f} seconds")
@@ -971,5 +972,12 @@ def main(Config):
                     f.write("Frontier Threshold Predicted:\n")
                     frontier_threshold_predicted.to_csv(f,sep='\t')
 
-
-main(Config)
+        if Config.WANBD_LOGGING:
+            wandb.init(project=Config.wandb_project)
+            wandb.log({"absolute_threshold_retrodicted":absolute_threshold_retrodicted})
+            wandb.log({"absolute_threshold_predicted":absolute_threshold_predicted})
+            if Config.COMPUTE_FRONTIER_COUNTS:
+                wandb.log({"frontier_threshold_retrodicted":frontier_threshold_retrodicted})
+                wandb.log({"frontier_threshold_predicted":frontier_threshold_predicted})
+            wandb.finish()
+#main(Config)
