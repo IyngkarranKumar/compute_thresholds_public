@@ -38,17 +38,27 @@ growth_weightings_config={
     "g_weights":[(0.1,0.9), (1/3,2/3), (0.5,0.5)]
 }
 
-allocation_gradient_config={
+allocation_gradient_config_a={
     "name":"allocation_gradient",
     "COMPUTE_FRONTIER_COUNTS":[False],
-    "grad_cum_alloc_min":[1.0],
-    "grad_cum_alloc_max":[1.0]
+    "grad_cum_alloc_min":[0.7],
+    "grad_cum_alloc_max":[0.9]
+}
+
+allocation_gradient_config_b={
+    "name":"allocation_gradient",
+    "COMPUTE_FRONTIER_COUNTS":[False],
+    "grad_cum_alloc_min":[0.5],
+    "grad_cum_alloc_max":[0.7]
 }
 
 
-paper_scenarios = [baseline_scenario_config, standard_lms_2024_sampling, allocations_search_config, growth_weightings_config, allocation_gradient_config]
-#paper_scenarios= [baseline_scenario_config]
-paper_scenarios = [allocation_gradient_config]
+paper_scenarios = [baseline_scenario_config, 
+                    standard_lms_2024_sampling, 
+                    allocations_search_config, 
+                    growth_weightings_config, 
+                    allocation_gradient_config_a, 
+                    allocation_gradient_config_b]
 
 for scenario in paper_scenarios:
     assert np.all(list((hasattr(Config,key) for key in scenario.keys()))), f"Scenario {scenario} has a key that is not in Config"

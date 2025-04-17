@@ -1,16 +1,16 @@
 import importlib
 import config
 import main
-import param_sweep_config
+import scenarios_config
 import itertools
 
 importlib.reload(main)
 importlib.reload(config)
-importlib.reload(param_sweep_config)
+importlib.reload(scenarios_config)
 
 from main import main
-from config import Config  #load in config in file
-from param_sweep_config import *
+from config import Config  #load in initialised config_class
+from scenarios_config import *
 
 
 if 1:

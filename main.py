@@ -91,7 +91,7 @@ def main(Config):
     if 1: #===Config===
 
         #SAVE Config
-        SAVE_Config={
+        SAVE_CONFIG={
             "workflow config": {
                 "name": Config.name,
                 "PLOT_SCHEMATIC_SCATTER": Config.PLOT_SCHEMATIC_SCATTER,
@@ -127,13 +127,9 @@ def main(Config):
             },
             "sampling parameters": {
                 "ALLOC_FIT_TYPE": Config.ALLOC_FIT_TYPE,
-                "POINT_CUM_ALLOC_PARAMS": Config.POINT_CUM_ALLOC_PARAMS,
                 "DISTRIBUTION_CUM_ALLOC_PARAMS": Config.DISTRIBUTION_CUM_ALLOC_PARAMS,
                 "grad_cum_alloc_range": [Config.grad_cum_alloc_min, Config.grad_cum_alloc_max],
-                "LMS_SAMPLING": Config.LMS_SAMPLING,
                 "largest_model_share": {
-                    "mean": Config.largest_model_share_mean,
-                    "stddev": Config.lms_stddev,
                     "min": Config.min_lms,
                     "max": Config.max_lms
                 },
@@ -251,8 +247,8 @@ def main(Config):
 
         g_AI_2027 = Config.g_global_AI_compute_mean*Config.g_AI_workload_share_mean
         g_total = Config.g_weights[0]*Config.g_historical + Config.g_weights[1]*g_AI_2027
-        SAVE_Config['training compute extrapolation']['g_total'] = g_total #for saving 
-        SAVE_Config['training compute extrapolation']['g_AI_2027'] = g_AI_2027 #for saving
+        SAVE_CONFIG['training compute extrapolation']['g_total'] = g_total #for saving 
+        SAVE_CONFIG['training compute extrapolation']['g_AI_2027'] = g_AI_2027 #for saving
                 
         ###DATA STRUCTURE INIT
         LOG_AGGREGATE_COMPUTE_DATA={}
@@ -491,10 +487,7 @@ def main(Config):
 
                     assert Config.ALLOC_FIT_TYPE in ['cumulative','categorical']
 
-                    if Config.POINT_CUM_ALLOC_PARAMS:
-                        grad_cum_alloc = np.mean([FIT_DATA[year]['cum_alloc_fits'][0] for year in FIT_DATA.keys()])
-                        int_cum_alloc = np.mean([FIT_DATA[year]['cum_alloc_fits'][1] for year in FIT_DATA.keys()])
-                    elif Config.DISTRIBUTION_CUM_ALLOC_PARAMS:
+                    if Config.DISTRIBUTION_CUM_ALLOC_PARAMS:
                         grad_cum_alloc, int_cum_alloc = np.random.uniform(Config.grad_cum_alloc_min,Config.grad_cum_alloc_max), 0
                     else:
                         raise ValueError("Invalid choice of cumulative alloc params")
@@ -956,7 +949,7 @@ def main(Config):
             current_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             # Save tables to results file
             with open(f'{Config.save_folder}/{current_date}_threshold_counts.csv', 'w') as f:
-                for key, value in SAVE_Config.items():
+                for key, value in SAVE_CONFIG.items():
                     f.write(f"{key}: {value}\n")
                 f.write("\n")
                 f.write("Absolute Threshold Retrodicted:\n")
@@ -972,7 +965,7 @@ def main(Config):
                     f.write("Frontier Threshold Predicted:\n")
                     frontier_threshold_predicted.to_csv(f,sep='\t')
 
-        if Config.WANBD_LOGGING:
+        if Config.WANDB_LOGGING:
             wandb.init(project=Config.wandb_project)
             wandb.log({"absolute_threshold_retrodicted":absolute_threshold_retrodicted})
             wandb.log({"absolute_threshold_predicted":absolute_threshold_predicted})
@@ -980,4 +973,6 @@ def main(Config):
                 wandb.log({"frontier_threshold_retrodicted":frontier_threshold_retrodicted})
                 wandb.log({"frontier_threshold_predicted":frontier_threshold_predicted})
             wandb.finish()
-#main(Config)
+
+
+main(Config)

@@ -1,6 +1,6 @@
 import numpy as np
 
-class Config:
+class config_class:
     
     name='baseline'
     PLOT_SCHEMATIC_SCATTER=False
@@ -8,12 +8,12 @@ class Config:
     FIT_ALLOCATION_PLOTS=False
     GENERATED_SAMPLE_PLOTS=False
     COMPUTE_FRONTIER_COUNTS=True
-    SAVE_RESULTS,save_folder = True, 'results'
-    WANDB_LOGGING, wandb_project=False, 'test-space'
+    SAVE_RESULTS,save_folder = True, 'results' 
+    WANDB_LOGGING, wandb_project=False, 'test-space' #for param sweeps
 
 
     #sampling parameters
-    n_simulations = 1 #for bootstrappng, sampling parameters etc. n_simulations = 10 #for bootstrappng, sampling parameters etc. 
+    n_simulations = 10 #for bootstrappng, sampling parameters etc. n_simulations = 10 #for bootstrappng, sampling parameters etc. 
 
     #training compute extrapolation config 
     AI2027_EXTRAP=True
@@ -45,17 +45,14 @@ class Config:
     filter_thresholds=1e-20 #ignore models smaller than this
 
     ##SAMPLING PARAMETERS
-    ALLOC_FIT_TYPE='cumulative' #[cumulative, categorical]
-    POINT_CUM_ALLOC_PARAMS=False #takes mean of historical datas
+    ALLOC_FIT_TYPE='cumulative' #[cumulative]
     DISTRIBUTION_CUM_ALLOC_PARAMS=True
-    grad_cum_alloc_min, grad_cum_alloc_max = 0.5,0.7
-    assert(POINT_CUM_ALLOC_PARAMS+DISTRIBUTION_CUM_ALLOC_PARAMS)==1, "Only one of DEFAULT_CUM_ALLOC_PARAMS or CUSTOM_CUM_ALLOC_PARAMS can be True"
+    grad_cum_alloc_min, grad_cum_alloc_max = 0.9,0.1
 
     #IMPORTANT PARAMETER - largest model share
     LMS_SAMPLING="uniform"
-    assert LMS_SAMPLING in ['gaussian', 'uniform']
-    largest_model_share_mean,lms_stddev,min_lms,max_lms=0.3, 0.1,0.05,0.50
-    SET_2024_LMS=False
+    min_lms,max_lms=0.05,0.50
+    SET_2024_LMS=True #enforce that largest model in 2024 ~ size of GPT-4o
 
 
     #min m sampling
@@ -71,3 +68,12 @@ class Config:
     threshold_widths = [0.5, 1, 1.5]  # List of threshold widths to analyze
     period_freq = '3M'  # frequency for doing frontier counts
     CI_percentiles=[5,50,95]
+
+
+
+Config=config_class()
+Config.n_simulations = 10
+Config.SAVE_RESULTS,Config.save_folder = True, 'results/run_a'
+Config.g_weights = [0.25,0.75] #historical, AI_2027
+Config.grad_cum_alloc_min,Config.grad_cum_alloc_max = 0.9,1.1
+Config.min_lms,Config.max_lms = 0.05,0.50
