@@ -1,2 +1,2 @@
-# compute_thresholds_public
-Code for Trends in Frontier AI Model Count
+# Trends in Frontier AI Model Count: A Forecast to 2028
+Code for Trends in Frontier AI Model Count: A Forecast to 2028
