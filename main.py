@@ -151,7 +151,7 @@ def main(Config):
         #Feb 2025 dataset
 
         #path 
-        path="/Users/iyngkarrankumar/Documents/GovAI WF/EUAIA_thresholds_project/data/notable_ai_models_24_02_2025.csv"
+        path="data/notable_ai_models_24_02_2025.csv"
 
         df = pd.read_csv(path)
         df = df[~df["Notability criteria"].isna()]
@@ -974,5 +974,3 @@ def main(Config):
                 wandb.log({"frontier_threshold_predicted":frontier_threshold_predicted})
             wandb.finish()
 
-
-main(Config)

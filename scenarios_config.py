@@ -12,24 +12,18 @@ standard_lms_2024_sampling = {
 }
 
 allocations_search_config={
-    "name":"allocations_search",
+    "name":"GATE allocations",
     "DYNAMIC_ALLOCATION":[True],
     "FIXED_ALLOCATION":[False],
     "COMPUTE_FRONTIER_COUNTS":[False],
-    "pred_alloc_dict":[{
-            2024: 40/60,
-            2025: 40/60, 
-            2026: 40/60,
-            2027: 30/70,
-            2028: 20/80,
-        },
+    "pred_alloc_dict":[
         {
             2024: 90/10,
             2025: 90/10, 
             2026: 70/30,
             2027: 70/30,
             2028: 70/30,
-        },]
+        }]
     }
 
 growth_weightings_config={
@@ -39,14 +33,14 @@ growth_weightings_config={
 }
 
 allocation_gradient_config_a={
-    "name":"allocation_gradient",
+    "name":"allocation_gradient_a",
     "COMPUTE_FRONTIER_COUNTS":[False],
     "grad_cum_alloc_min":[0.7],
     "grad_cum_alloc_max":[0.9]
 }
 
 allocation_gradient_config_b={
-    "name":"allocation_gradient",
+    "name":"allocation_gradient_b",
     "COMPUTE_FRONTIER_COUNTS":[False],
     "grad_cum_alloc_min":[0.5],
     "grad_cum_alloc_max":[0.7]

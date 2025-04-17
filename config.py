@@ -72,8 +72,12 @@ class config_class:
 
 
 Config=config_class()
+Config.name='run_a'
 Config.n_simulations = 10
 Config.SAVE_RESULTS,Config.save_folder = True, 'results/run_a'
 Config.g_weights = [0.25,0.75] #historical, AI_2027
 Config.grad_cum_alloc_min,Config.grad_cum_alloc_max = 0.9,1.1
 Config.min_lms,Config.max_lms = 0.05,0.50
+Config.DYNAMIC_ALLOCATION,Config.FIXED_ALLOCATION=True,False
+
+
