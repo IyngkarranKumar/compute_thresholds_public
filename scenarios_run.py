@@ -3,6 +3,8 @@ import config
 import main
 import scenarios_config
 import itertools
+import argparse
+
 
 importlib.reload(main)
 importlib.reload(config)
@@ -14,10 +16,21 @@ from scenarios_config import *
 
 
 
+# Set up command line argument parsing
+parser = argparse.ArgumentParser(description='Run scenarios with specified save folder')
+parser.add_argument('--save_folder', type=str, default='results', 
+                    help='Folder path to save results')
+args = parser.parse_args()
+
+# Set save folder in Config
+assert Config.SAVE_RESULTS==True #make sure saving on
+
+
 for scenario in paper_scenarios:
     #reset to baseline config 
     importlib.reload(config); from config import Config
     Config.name = scenario.get('name', 'no name found'); print('\n\n',Config.name)
+    Config.save_folder = args.save_folder
     scenario = {k:v for k,v in scenario.items() if k != 'name'}
 
     param_combinations = list(itertools.product(*scenario.values()))

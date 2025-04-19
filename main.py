@@ -18,7 +18,7 @@ def main(Config):
             format='%(asctime)s - %(levelname)s - %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S',
             handlers=[
-                logging.FileHandler(log_filename),
+                #logging.FileHandler(log_filename),
                 #logging.StreamHandler()
             ]
 
@@ -454,8 +454,6 @@ def main(Config):
         COMPUTE_SAMPLE_DATA = {sim: {int(year): {} for year in all_years} for sim in range(Config.n_simulations)} #init data structure 
 
         for sim in range(Config.n_simulations):
-            print(f"Sim {sim} of {Config.n_simulations}")
-
             for year in all_years:
                 #get total compute
                 if year in Config.fit_years:
@@ -476,7 +474,7 @@ def main(Config):
                     if year==2024 and Config.SET_2024_LMS: norm_largest_model=0.1
 
                     largest_model = norm_largest_model * agg_training_compute
-                    assert largest_model <= 0.5*agg_training_compute, print(f"Year: {year}, Largest Model: {largest_model}, Total Training Compute: {agg_training_compute}")
+                    assert largest_model <= 0.5*agg_training_compute, f"Year: {year}, Largest Model: {largest_model}, Total Training Compute: {agg_training_compute}"
 
                     #sample smallest model that year
                     min_norm_m = 10**(np.random.uniform(np.log10(Config.min_norm_m_min),np.log10(Config.min_norm_m_max)))
