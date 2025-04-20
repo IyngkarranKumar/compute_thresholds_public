@@ -1,29 +1,29 @@
 import numpy as np
 
-class config_class:
+class main_config:
     
     name='baseline'
     PLOT_SCHEMATIC_SCATTER=False
     TRAINING_COMPUTE_PLOTS=False
     FIT_ALLOCATION_PLOTS=False
     GENERATED_SAMPLE_PLOTS=False
-    COMPUTE_FRONTIER_COUNTS=True
-    SAVE_RESULTS,save_folder = True, 'results' 
-    WANDB_LOGGING, wandb_project=False, 'test-space' #for param sweeps
+    COMPUTE_FRONTIER_COUNTS=False
+    SAVE_RESULTS,save_folder = False, 'results'
+    WANDB_LOGGING, wandb_project=False, 'test-space'
+    SET_2024_COUNTS=True
 
 
     #sampling parameters
-    n_simulations = 10 #for bootstrappng, sampling parameters etc. n_simulations = 10 #for bootstrappng, sampling parameters etc. 
+    n_simulations = 100 #for bootstrappng, sampling parameters etc. n_simulations = 10 #for bootstrappng, sampling parameters etc. 
 
     #training compute extrapolation config 
     AI2027_EXTRAP=True
     method_choice="method 2027" #['linear extrapolation', 'method 2027']
     hist_alloc=40/60
     hist_alloc_multiplier=1+(1/hist_alloc)
-    FIXED_ALLOCATION=False
-    fixed_alloc=40/60
-    DYNAMIC_ALLOCATION=True #inference scaling continues improving
+    FIXED_ALLOCATION,DYNAMIC_ALLOCATION=False,True
     assert(FIXED_ALLOCATION+DYNAMIC_ALLOCATION)==1
+    fixed_alloc=60/40
     pred_alloc_dict = {
             2024: 40/60,
             2025: 40/60,
@@ -45,14 +45,17 @@ class config_class:
     filter_thresholds=1e-20 #ignore models smaller than this
 
     ##SAMPLING PARAMETERS
-    ALLOC_FIT_TYPE='cumulative' #[cumulative]
+    ALLOC_FIT_TYPE='cumulative' #[cumulative, categorical]
+    POINT_CUM_ALLOC_PARAMS=False #takes mean of historical datas
     DISTRIBUTION_CUM_ALLOC_PARAMS=True
-    grad_cum_alloc_min, grad_cum_alloc_max = 0.9,0.1
+    grad_cum_alloc_min, grad_cum_alloc_max = 0.9,1.1
+    assert(POINT_CUM_ALLOC_PARAMS+DISTRIBUTION_CUM_ALLOC_PARAMS)==1, "Only one of DEFAULT_CUM_ALLOC_PARAMS or CUSTOM_CUM_ALLOC_PARAMS can be True"
 
     #IMPORTANT PARAMETER - largest model share
-    LMS_SAMPLING="uniform"
+    LMS_SAMPLING="log_normal"
+    assert LMS_SAMPLING in ['log_normal', 'uniform']
     min_lms,max_lms=0.05,0.50
-    SET_2024_LMS=True #enforce that largest model in 2024 ~ size of GPT-4o
+    SET_2024_LMS=True
 
 
     #min m sampling
@@ -70,14 +73,17 @@ class config_class:
     CI_percentiles=[5,50,95]
 
 
+#baseline scenario
+Config=main_config()
+Config.name='baseline'
+Config.SAVE_RESULTS=False
+Config.save_folder='results/paper_scenarios'
+Config.n_simulations=100
+Config.SET_2024_COUNTS=False
+Config.COMPUTE_FRONTIER_COUNTS=True
 
-Config=config_class()
-Config.name='run_a'
-Config.n_simulations = 1
-Config.SAVE_RESULTS,Config.save_folder = True, 'results/run_a'
-Config.g_weights = [0.25,0.75] #historical, AI_2027
-Config.grad_cum_alloc_min,Config.grad_cum_alloc_max = 0.9,1.1
-Config.min_lms,Config.max_lms = 0.05,0.50
+Config.LMS_SAMPLING='log_normal'
+Config.min_lms, Config.max_lms = 0.05, 0.50
+Config.SET_2024_LMS=True
 Config.DYNAMIC_ALLOCATION,Config.FIXED_ALLOCATION=True,False
-
-
+Config.grad_cum_alloc_min,Config.grad_cum_alloc_max=0.9,1.1

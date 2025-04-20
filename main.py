@@ -18,7 +18,7 @@ def main(Config):
             format='%(asctime)s - %(levelname)s - %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S',
             handlers=[
-                #logging.FileHandler(log_filename),
+                logging.FileHandler(log_filename),
                 #logging.StreamHandler()
             ]
 
@@ -91,7 +91,7 @@ def main(Config):
     if 1: #===Config===
 
         #SAVE Config
-        SAVE_CONFIG={
+        SAVE_Config={
             "workflow config": {
                 "name": Config.name,
                 "PLOT_SCHEMATIC_SCATTER": Config.PLOT_SCHEMATIC_SCATTER,
@@ -127,8 +127,10 @@ def main(Config):
             },
             "sampling parameters": {
                 "ALLOC_FIT_TYPE": Config.ALLOC_FIT_TYPE,
+                "POINT_CUM_ALLOC_PARAMS": Config.POINT_CUM_ALLOC_PARAMS,
                 "DISTRIBUTION_CUM_ALLOC_PARAMS": Config.DISTRIBUTION_CUM_ALLOC_PARAMS,
                 "grad_cum_alloc_range": [Config.grad_cum_alloc_min, Config.grad_cum_alloc_max],
+                "LMS_SAMPLING": Config.LMS_SAMPLING,
                 "largest_model_share": {
                     "min": Config.min_lms,
                     "max": Config.max_lms
@@ -247,8 +249,8 @@ def main(Config):
 
         g_AI_2027 = Config.g_global_AI_compute_mean*Config.g_AI_workload_share_mean
         g_total = Config.g_weights[0]*Config.g_historical + Config.g_weights[1]*g_AI_2027
-        SAVE_CONFIG['training compute extrapolation']['g_total'] = g_total #for saving 
-        SAVE_CONFIG['training compute extrapolation']['g_AI_2027'] = g_AI_2027 #for saving
+        SAVE_Config['training compute extrapolation']['g_total'] = g_total #for saving 
+        SAVE_Config['training compute extrapolation']['g_AI_2027'] = g_AI_2027 #for saving
                 
         ###DATA STRUCTURE INIT
         LOG_AGGREGATE_COMPUTE_DATA={}
@@ -454,6 +456,8 @@ def main(Config):
         COMPUTE_SAMPLE_DATA = {sim: {int(year): {} for year in all_years} for sim in range(Config.n_simulations)} #init data structure 
 
         for sim in range(Config.n_simulations):
+            #print(f"Sim {sim} of {Config.n_simulations}")
+
             for year in all_years:
                 #get total compute
                 if year in Config.fit_years:
@@ -467,14 +471,26 @@ def main(Config):
                 VALID_ALLOCATION=False
                 while not VALID_ALLOCATION:
 
-                    #set largest model 
-                    norm_largest_model = np.random.uniform(Config.min_lms, Config.max_lms)
+                    #LMS sampling
+                    if year in Config.fit_years: #uniform sampling for historical  data 
+                        norm_largest_model = np.random.uniform(Config.min_lms, Config.max_lms)
+                    else: 
+                        if year==2024 and Config.SET_2024_LMS:
+                            gpt_4o_size = 3.80*10**25
+                            norm_largest_model = gpt_4o_size/agg_training_compute
+                        else: 
+                            if Config.LMS_SAMPLING=='uniform':
+                                norm_largest_model = np.random.uniform(Config.min_lms, Config.max_lms)
+                            elif Config.LMS_SAMPLING=='log_normal':
+                                log_mean = np.mean([np.log(Config.min_lms), np.log(Config.max_lms)])
+                                log_stdev = np.abs((np.log(Config.max_lms) - np.log(Config.min_lms))/4)
+                                norm_largest_model = np.random.lognormal(mean=log_mean, sigma=log_stdev) #initial sample
+                                while norm_largest_model < Config.min_lms or norm_largest_model > Config.max_lms: #resample until within bounds
+                                    norm_largest_model = np.random.lognormal(mean=log_mean, sigma=log_stdev)
 
-                    #for setting 2024 LMS    
-                    if year==2024 and Config.SET_2024_LMS: norm_largest_model=0.1
 
                     largest_model = norm_largest_model * agg_training_compute
-                    assert largest_model <= 0.5*agg_training_compute, f"Year: {year}, Largest Model: {largest_model}, Total Training Compute: {agg_training_compute}"
+                    #assert largest_model <= 0.5*agg_training_compute, print(f"Year: {year}, Largest Model: {largest_model}, Total Training Compute: {agg_training_compute}")
 
                     #sample smallest model that year
                     min_norm_m = 10**(np.random.uniform(np.log10(Config.min_norm_m_min),np.log10(Config.min_norm_m_max)))
@@ -485,7 +501,10 @@ def main(Config):
 
                     assert Config.ALLOC_FIT_TYPE in ['cumulative','categorical']
 
-                    if Config.DISTRIBUTION_CUM_ALLOC_PARAMS:
+                    if Config.POINT_CUM_ALLOC_PARAMS:
+                        grad_cum_alloc = np.mean([FIT_DATA[year]['cum_alloc_fits'][0] for year in FIT_DATA.keys()])
+                        int_cum_alloc = np.mean([FIT_DATA[year]['cum_alloc_fits'][1] for year in FIT_DATA.keys()])
+                    elif Config.DISTRIBUTION_CUM_ALLOC_PARAMS:
                         grad_cum_alloc, int_cum_alloc = np.random.uniform(Config.grad_cum_alloc_min,Config.grad_cum_alloc_max), 0
                     else:
                         raise ValueError("Invalid choice of cumulative alloc params")
@@ -833,11 +852,24 @@ def main(Config):
                 index=[f'>1e{t}' for t in Config.thresholds]
             )
 
+        if Config.SET_2024_COUNTS:
+            for percentile in percentile_dfs:
+                percentile_dfs[percentile].loc['>1e25', 2024] = 20 #set to 20 models released over 1e25 in 2024
+                percentile_dfs[percentile].loc['>1e26', 2024] = 0 #0 models released in 2025 over 1e26
+        
         # Make cumulative across years
         percentile_dfs_cumulative = {
             percentile: df.cumsum(axis=1) 
             for percentile, df in percentile_dfs.items()
         }
+
+
+        for percentile in percentile_dfs_cumulative:
+            percentile_dfs_cumulative[percentile].loc['>1e25'] = percentile_dfs_cumulative[percentile].loc['>1e25'] + 4
+
+        
+
+        
 
         # Combine into a single DataFrame
         df_combined_cumulative = pd.DataFrame()
@@ -945,9 +977,11 @@ def main(Config):
             # Get current date
             time.sleep(1) #just to get different file names
             current_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            filename = f"{Config.name}-{datetime.now().strftime('%H-%M-%S')}"
+
             # Save tables to results file
-            with open(f'{Config.save_folder}/{current_date}_threshold_counts.csv', 'w') as f:
-                for key, value in SAVE_CONFIG.items():
+            with open(f'{Config.save_folder}/{filename}.csv', 'w') as f:
+                for key, value in SAVE_Config.items():
                     f.write(f"{key}: {value}\n")
                 f.write("\n")
                 f.write("Absolute Threshold Retrodicted:\n")
@@ -972,3 +1006,5 @@ def main(Config):
                 wandb.log({"frontier_threshold_predicted":frontier_threshold_predicted})
             wandb.finish()
 
+
+#main(Config)
