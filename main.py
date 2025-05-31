@@ -1,14 +1,27 @@
 import config, importlib
+import logging, time, os
+import numpy as np
+from scipy import stats, optimize
+import matplotlib.pyplot as plt
+import pandas as pd #taking long to load here
+import seaborn as sns
+import itertools
+import copy,re, pdb, logging
+from sklearn import linear_model
+from collections import defaultdict
+import warnings
+from IPython.display import display
+import wandb 
+from datetime import datetime
+
+
 importlib.reload(config)
 from config import Config
 
 def main(Config):
 
-    if 1: #===IMPORTS===
-            
-        import logging, time, os
-        from datetime import datetime
-
+    if 1: #setup logging
+        #clear any existing handlers
         logging.getLogger().handlers.clear()
 
         # Generate log file name based on current date and time
@@ -21,28 +34,7 @@ def main(Config):
                 logging.FileHandler(log_filename),
                 #logging.StreamHandler()
             ]
-
         )
-
-        import time
-        start_time = time.time()
-        logging.info("Starting imports...")
-        import numpy as np
-        from scipy import stats, optimize
-        import matplotlib.pyplot as plt
-        import pandas as pd #taking long to load here
-        import seaborn as sns
-        import itertools
-        import copy,re, pdb, logging
-        from sklearn import linear_model
-        from collections import defaultdict
-        import warnings
-        from IPython.display import display
-        import wandb 
-        
-        end_time = time.time()
-        logging.info(f"Imports completed in {end_time - start_time:.2f} seconds")
-            
 
         np.random.seed(None)
         warnings.filterwarnings("ignore")
@@ -1005,6 +997,3 @@ def main(Config):
                 wandb.log({"frontier_threshold_retrodicted":frontier_threshold_retrodicted})
                 wandb.log({"frontier_threshold_predicted":frontier_threshold_predicted})
             wandb.finish()
-
-
-#main(Config)

@@ -3,8 +3,21 @@ importlib.reload(config)
 from config import Config
 
 #baseline scenario
-baseline_scenario_config={ 
-    "name":"baseline"
+baseline_scenario_config={
+    "name":"baseline",
+    "SAVE_RESULTS":[False],
+    "save_folder":["results/paper_scenarios"],
+    "n_simulations":[100],
+    "SET_2024_COUNTS":[True],
+    "COMPUTE_FRONTIER_COUNTS":[True],
+    "LMS_SAMPLING":["log_normal"],
+    "min_lms":[0.05],
+    "max_lms":[0.50],
+    "SET_2024_LMS":[True],
+    "DYNAMIC_ALLOCATION":[True],
+    "FIXED_ALLOCATION":[False],
+    "grad_cum_alloc_min":[0.9],
+    "grad_cum_alloc_max":[1.1]
 }
 
 #2024 without setting 2024 largest model to gpt-4o
