@@ -13,7 +13,7 @@ class main_config:
     SET_2024_COUNTS=True
 
     #KEY PARAMETERS
-    n_simulations = 1 #for generating CIs
+    n_simulations = 1000 #for generating CIs
     g_weights = [0.25,0.75] #weighting of growth weights
     pred_alloc_dict = { #training-inference allocations
         2024: 40/60,
