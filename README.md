@@ -38,9 +38,10 @@ For detailed analysis and visualization:
 1. Open `analysis.ipynb` in Jupyter
 2. Explore model parameters
 3. Generate visualizations for:
+   - Historical distributions over training compute
    - Training compute forecasts
-   - Workload allocations
-   - Threshold impacts
+   - Linear fits to historical compute allocation
+   - ...
 
 
 ## Citation

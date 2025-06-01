@@ -26,6 +26,7 @@ def main(Config):
 
         # Generate log file name based on current date and time
         log_filename = datetime.now().strftime('logs/%Y-%m-%d_%H-%M-%S.log')
+        os.makedirs(os.path.dirname(log_filename), exist_ok=True)
         logging.basicConfig(
             level=logging.INFO,
             format='%(asctime)s - %(levelname)s - %(message)s',
